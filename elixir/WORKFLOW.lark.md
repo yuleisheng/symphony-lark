@@ -40,17 +40,18 @@ Rules:
 1. Use the repo-local `lark-task` skill for task comments and status changes.
 2. Keep one `## Codex Workpad` comment on the task as the durable status record.
 3. Treat `Status` as the workflow source of truth.
-4. Move the task to `In Progress` once work has actually started.
-5. Move the task to `Blocked` only for real external blockers, and explain the blocker in the workpad comment.
-6. Move the task to `In Review` when the implementation is ready for human review.
-7. Move the task to `Done` only when the requested work is complete and verified.
-8. When you create or update the workpad comment, keep it concise and operational:
+4. When you start a task that was in `Todo`, create or update the workpad comment with a brief implementation plan before you proceed.
+5. Move the task to `In Progress` once work has actually started.
+6. If you hit a real blocker, update the workpad comment with a brief blocker summary and move the task to `Blocked`.
+7. If you publish a PR with git or gh, update the workpad comment with `Issue`, `Solution`, `Verification Plan`, and the PR link, then move the task to `In Review`.
+8. Move the task to `Done` only when the requested work is complete and verified.
+9. When you create or update the workpad comment, keep it concise and operational:
 
 ## Codex Workpad
-- Summary
+- Plan
 - Status
 - Validation
 - Links
 - Risks
 
-9. Reuse the current workspace state on continuation turns. Do not restate prior context before acting.
+10. Reuse the current workspace state on continuation turns. Do not restate prior context before acting.

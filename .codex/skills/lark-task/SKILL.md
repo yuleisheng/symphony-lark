@@ -28,7 +28,7 @@ Use the `lark_task_api` dynamic tool. It only allows `GET`, `POST`, and `PATCH` 
 
 ```json
 {
-  "content": "## Codex Workpad\n- Summary\n- Status\n- Validation\n- Links\n- Risks"
+  "content": "## Codex Workpad\n- Plan\n- Status\n- Validation\n- Links\n- Risks"
 }
 ```
 
@@ -70,11 +70,49 @@ Use the `lark_task_api` dynamic tool. It only allows `GET`, `POST`, and `PATCH` 
 - If one already exists, update it instead of creating another.
 - Keep it concise and operational.
 - Include links such as PRs in the workpad comment instead of scattering status across multiple comments.
+- When a task starts from `Todo`, update the workpad immediately with a short plan before proceeding.
+- If the task becomes blocked, update the workpad with a brief blocker summary.
+- If you publish a PR, update the workpad with `Issue`, `Solution`, `Verification Plan`, and the PR link.
 
 ## Status Rules
 
 - Use the tasklist `Status` field as the workflow source of truth.
 - Move to `In Progress` when active implementation starts.
-- Move to `Blocked` only when there is a real external blocker.
-- Move to `In Review` when implementation is ready for human review.
+- Move to `Blocked` only when there is a real external blocker, after updating the workpad with the blocker.
+- Move to `In Review` after a PR is published and the workpad has been updated with the PR handoff details.
 - Move to `Done` only after the requested work is complete and verified.
+
+## Recommended Comment Shapes
+
+### Initial plan update
+
+```markdown
+## Codex Workpad
+- Plan: 1-3 concrete implementation steps.
+- Status: Starting work.
+- Validation: How you expect to verify the change.
+- Links: Relevant branch, PR, or task links if any.
+- Risks: Known unknowns or `None`.
+```
+
+### Blocked update
+
+```markdown
+## Codex Workpad
+- Plan: Current plan or next intended step.
+- Status: Blocked on <brief blocker>.
+- Validation: What is pending once unblocked.
+- Links: Relevant task or dependency links.
+- Risks: <brief blocker summary>
+```
+
+### PR handoff update
+
+```markdown
+## Codex Workpad
+- Issue: What problem the task addresses.
+- Solution: What changed.
+- Verification Plan: What should be checked in review or validation.
+- Links: PR URL and any related links.
+- Risks: Follow-ups, caveats, or `None`.
+```
