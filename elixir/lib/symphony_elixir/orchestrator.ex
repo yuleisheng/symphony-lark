@@ -698,6 +698,8 @@ defmodule SymphonyElixir.Orchestrator do
 
         Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} worker_host=#{worker_host || "local"}")
 
+        issue = maybe_mark_issue_in_progress(issue)
+
         running =
           Map.put(state.running, issue.id, %{
             pid: pid,
@@ -740,6 +742,28 @@ defmodule SymphonyElixir.Orchestrator do
         })
     end
   end
+
+  defp maybe_mark_issue_in_progress(%Task{id: issue_id, state: state_name} = issue)
+       when is_binary(issue_id) and is_binary(state_name) do
+    todo_state = Config.settings!().tracker.todo_state
+    in_progress_state = Config.settings!().tracker.in_progress_state
+
+    if normalize_issue_state(state_name) == normalize_issue_state(todo_state) do
+      case Tracker.update_issue_state(issue_id, in_progress_state) do
+        :ok ->
+          Logger.info("Marked dispatched issue as in progress: #{issue_context(issue)} state=#{in_progress_state}")
+          %Task{issue | state: in_progress_state}
+
+        {:error, reason} ->
+          Logger.warning("Failed to mark dispatched issue as in progress: #{issue_context(issue)} target_state=#{in_progress_state} reason=#{inspect(reason)}")
+          issue
+      end
+    else
+      issue
+    end
+  end
+
+  defp maybe_mark_issue_in_progress(issue), do: issue
 
   defp revalidate_issue_for_dispatch(%Task{id: issue_id}, issue_fetcher, terminal_states)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do

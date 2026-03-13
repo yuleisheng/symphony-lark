@@ -897,6 +897,86 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert next_poll_in_ms <= 50
   end
 
+  test "orchestrator marks dispatched todo issues as in progress" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-orchestrator-in-progress-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      issue_id = "issue-dispatch-todo"
+
+      File.mkdir_p!(workspace_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      count=0
+      while IFS= read -r line; do
+        count=$((count + 1))
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-todo"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-todo"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_api_token: nil,
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server",
+        max_turns: 1
+      )
+
+      Application.put_env(:symphony_elixir, :tracker_adapter_override, SymphonyElixir.Tracker.Memory)
+      Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+      Application.put_env(:symphony_elixir, :memory_tracker_issues, [
+        %Issue{
+          id: issue_id,
+          identifier: "MT-TODO",
+          title: "Todo dispatch test",
+          description: "Verify dispatched Todo issues are marked in progress",
+          state: "Todo",
+          url: "https://example.org/issues/MT-TODO"
+        }
+      ])
+
+      orchestrator_name = Module.concat(__MODULE__, :TodoDispatchOrchestrator)
+      {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          Process.exit(pid, :normal)
+        end
+      end)
+
+      send(pid, :run_poll_cycle)
+
+      assert_receive {:memory_tracker_state_update, ^issue_id, "In Progress"}, 2_000
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "orchestrator restarts stalled workers with retry backoff" do
     write_workflow_file!(Workflow.workflow_file_path(),
       tracker_api_token: nil,
