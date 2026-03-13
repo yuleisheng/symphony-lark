@@ -1,6 +1,6 @@
 ---
 name: install-symphony-lark
-description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain, guide the Lark Tasks setup, and start the local service with WORKFLOW.lark.md.
+description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain, bootstrap Lark auth and tasklist access, and start the local service with WORKFLOW.lark.md.
 ---
 
 # Install Symphony Lark
@@ -16,7 +16,7 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 
 - Get a local `symphony-lark` checkout built and runnable.
 - Verify the required CLIs and auth.
-- Guide the Lark app, tasklist, and `Status` setup if needed.
+- Prefer app-driven Lark bootstrap when tasklist access is missing.
 - Start Symphony with `elixir/WORKFLOW.lark.md`.
 
 ## Required Inputs
@@ -24,6 +24,7 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - target clone path
 - repo URL, if the user wants a different fork or remote
 - whether the user already has `LARK_APP_ID`, `LARK_APP_SECRET`, and `LARK_TASKLIST_GUID`
+- the human user's actual Feishu/Lark account email when tasklist bootstrap is needed
 
 ## Steps
 
@@ -49,18 +50,20 @@ mise exec -- mix build
    - `codex app-server --help`
    - confirm `LARK_APP_ID`
    - confirm `LARK_APP_SECRET`
-   - confirm `LARK_TASKLIST_GUID`, or continue into guided Lark setup
+   - if `LARK_TASKLIST_GUID` exists, verify the app can list tasks and custom fields for it
+   - if the app cannot read the configured tasklist, continue into API-driven Lark setup
 5. Guided Lark setup when needed.
    - create or identify the Lark app in Open Platform
    - confirm Task v2 read, patch, tasklist, custom-field, and comment permissions
-   - create or choose one shared tasklist for Symphony
-   - create a single-select `Status` field with exact options:
-     - `Todo`
-     - `In Progress`
-     - `Blocked`
-     - `In Review`
-     - `Done`
-   - obtain the `tasklist_guid`
+   - confirm `contact:user.id:readonly`
+   - use the user's actual account email for ID lookup; enterprise email may not return `open_id`
+   - prefer API bootstrap over user-selected tasklists:
+     - create the tasklist via API
+     - look up the user's `open_id` via email
+     - add the user as an editor to the app-created tasklist
+     - create the `Status` single-select field via API with exact options `Todo`, `In Progress`, `Blocked`, `In Review`, `Done`
+     - write back the final `LARK_TASKLIST_GUID`
+   - if an existing user-owned tasklist is unreadable by the app, stop treating it as the primary path and create an app-owned tasklist instead
 6. Start Symphony.
 
 ```bash
@@ -76,8 +79,17 @@ Add `--port 4000` if the user wants the dashboard.
    - confirm the service boots
    - confirm the configured workflow loads
    - confirm Symphony can read the configured tasklist
+   - confirm the `Status` field is visible to the app
+
+## API Paths
+
+- Tasklist create: `POST /open-apis/task/v2/tasklists`
+- User lookup: `POST /open-apis/contact/v3/users/batch_get_id?user_id_type=open_id`
+- Add member: `POST /open-apis/task/v2/tasklists/{guid}/add_members?user_id_type=open_id`
+- Create `Status`: `POST /open-apis/task/v2/custom_fields?user_id_type=open_id`
 
 ## Notes
 
 - Prefer temporary `export` commands unless the user explicitly asks to modify shell startup files.
+- `open.larksuite.com` and `open.feishu.cn` may both work in some tenants; keep the workflow endpoint aligned with the base that actually passes the tasklist probes.
 - If blocked, report the exact missing tool, env var, permission, or tasklist/status setup item.
