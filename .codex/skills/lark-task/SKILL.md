@@ -52,6 +52,7 @@ Use the `lark_task_api` dynamic tool. It only allows `GET`, `POST`, and `PATCH` 
 
 ```json
 {
+  "update_fields": ["custom_fields"],
   "task": {
     "custom_fields": [
       {
@@ -63,6 +64,8 @@ Use the `lark_task_api` dynamic tool. It only allows `GET`, `POST`, and `PATCH` 
   }
 }
 ```
+
+- If the patch also updates `completed_at`, include it in `update_fields` as well.
 
 ## Workpad Rules
 

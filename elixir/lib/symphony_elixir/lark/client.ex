@@ -41,7 +41,14 @@ defmodule SymphonyElixir.Lark.Client do
 
   @spec patch_task(String.t(), map(), keyword()) :: {:ok, map()} | {:error, term()}
   def patch_task(task_guid, attrs, opts \\ []) when is_binary(task_guid) and is_map(attrs) do
-    request(:patch, task_path(task_guid), Keyword.put(opts, :body, %{"task" => attrs}))
+    request(
+      :patch,
+      task_path(task_guid),
+      Keyword.put(opts, :body, %{
+        "task" => attrs,
+        "update_fields" => attrs |> Map.keys() |> Enum.map(&to_string/1) |> Enum.sort()
+      })
+    )
   end
 
   @spec list_tasklist_tasks(String.t(), boolean(), keyword()) :: {:ok, [map()]} | {:error, term()}
