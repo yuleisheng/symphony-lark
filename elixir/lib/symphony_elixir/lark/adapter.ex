@@ -57,8 +57,25 @@ defmodule SymphonyElixir.Lark.Adapter do
     if ids == [] do
       {:ok, []}
     else
-      with {:ok, state_field} <- resolve_state_field() do
-        hydrate_tasks(Enum.map(ids, &%{"guid" => &1}), state_field)
+      requested_ids = MapSet.new(ids)
+
+      with {:ok, state_field} <- resolve_state_field(),
+           {:ok, open_tasks} <- fetch_tasks_for_completion_state(false, state_field),
+           {:ok, completed_tasks} <- fetch_tasks_for_completion_state(true, state_field) do
+        tasks_by_id =
+          (open_tasks ++ completed_tasks)
+          |> dedupe_tasks()
+          |> Map.new(&{&1.id, &1})
+
+        {:ok,
+         ids
+         |> Enum.filter(&MapSet.member?(requested_ids, &1))
+         |> Enum.flat_map(fn issue_id ->
+           case Map.get(tasks_by_id, issue_id) do
+             %Task{} = task -> [task]
+             _ -> []
+           end
+         end)}
       end
     end
   end
@@ -105,22 +122,19 @@ defmodule SymphonyElixir.Lark.Adapter do
     tracker = Config.settings!().tracker
 
     with {:ok, task_entries} <- client_module().list_tasklist_tasks(tracker.tasklist_guid, completed?) do
-      hydrate_tasks(task_entries, state_field)
+      hydrate_task_entries(task_entries, state_field)
     end
   end
 
-  defp hydrate_tasks(task_entries, state_field) when is_list(task_entries) do
+  defp hydrate_task_entries(task_entries, state_field) when is_list(task_entries) do
     task_entries
-    |> Enum.map(&task_guid/1)
-    |> Enum.filter(&is_binary/1)
-    |> Enum.uniq()
     |> Enum.reduce_while({:ok, []}, fn task_guid, {:ok, acc} ->
-      case client_module().get_task(task_guid) do
-        {:ok, task} when is_map(task) ->
-          {:cont, {:ok, [normalize_task(task, state_field) | acc]}}
+      case hydrate_task_entry(task_guid, state_field) do
+        {:ok, %Task{} = task} ->
+          {:cont, {:ok, [task | acc]}}
 
-        {:ok, other} ->
-          {:halt, {:error, {:unexpected_lark_task_response, task_guid, other}}}
+        :skip ->
+          {:cont, {:ok, acc}}
 
         {:error, reason} ->
           {:halt, {:error, reason}}
@@ -131,6 +145,83 @@ defmodule SymphonyElixir.Lark.Adapter do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp hydrate_task_entry(task_entry, state_field) when is_map(task_entry) do
+    task = normalize_task(task_entry, state_field)
+    task_guid = task_guid(task_entry)
+
+    cond do
+      task_has_dispatch_metadata?(task) ->
+        {:ok, task}
+
+      is_binary(task_guid) and task_guid != "" ->
+        fetch_task_details(task_entry, task_guid, state_field)
+
+      true ->
+        :skip
+    end
+  end
+
+  defp hydrate_task_entry(_task_entry, _state_field), do: :skip
+
+  defp task_has_dispatch_metadata?(%Task{title: title, state: state})
+       when is_binary(title) and title != "" and is_binary(state) and state != "" do
+    true
+  end
+
+  defp task_has_dispatch_metadata?(_task), do: false
+
+  defp fetch_task_details(task_entry, task_guid, state_field) do
+    case client_module().get_task(task_guid) do
+      {:ok, task} when is_map(task) ->
+        {:ok, normalize_task(merge_task_payloads(task_entry, task), state_field)}
+
+      {:ok, other} ->
+        {:error, {:unexpected_lark_task_response, task_guid, other}}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp merge_task_payloads(task_summary, task_details)
+       when is_map(task_summary) and is_map(task_details) do
+    Map.merge(task_summary, task_details, fn
+      "custom_fields", summary_value, details_value ->
+        prefer_non_empty_list(details_value, summary_value)
+
+      _key, summary_value, details_value ->
+        prefer_present_value(details_value, summary_value)
+    end)
+  end
+
+  defp prefer_non_empty_list(details_value, _summary_value) when is_list(details_value) and details_value != [],
+    do: details_value
+
+  defp prefer_non_empty_list(_details_value, summary_value) when is_list(summary_value), do: summary_value
+  defp prefer_non_empty_list(details_value, _summary_value), do: details_value
+
+  defp prefer_present_value(details_value, _summary_value)
+       when is_binary(details_value) and details_value != "",
+       do: details_value
+
+  defp prefer_present_value(details_value, _summary_value)
+       when is_list(details_value) and details_value != [],
+       do: details_value
+
+  defp prefer_present_value(details_value, _summary_value)
+       when is_map(details_value) and map_size(details_value) > 0,
+       do: details_value
+
+  defp prefer_present_value(details_value, _summary_value)
+       when is_integer(details_value) or is_float(details_value) or is_boolean(details_value),
+       do: details_value
+
+  defp prefer_present_value(nil, summary_value), do: summary_value
+  defp prefer_present_value("", summary_value), do: summary_value
+  defp prefer_present_value([], summary_value), do: summary_value
+  defp prefer_present_value(%{}, summary_value), do: summary_value
+  defp prefer_present_value(details_value, _summary_value), do: details_value
 
   defp dedupe_tasks(tasks) do
     tasks

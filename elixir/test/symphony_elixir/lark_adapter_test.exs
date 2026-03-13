@@ -66,6 +66,42 @@ defmodule SymphonyElixir.LarkAdapterTest do
     end
   end
 
+  defmodule SummaryStateLarkClient do
+    def list_custom_fields(_tasklist_guid) do
+      FakeLarkClient.list_custom_fields("unused")
+    end
+
+    def list_tasklist_tasks(_tasklist_guid, completed?) do
+      entries =
+        case completed? do
+          false ->
+            [
+              %{
+                "guid" => "task-todo",
+                "summary" => "Todo task",
+                "description" => "Ready to pick up",
+                "created_at" => "2026-03-14T00:00:00Z",
+                "custom_fields" => [%{"guid" => "field-status", "single_select_value" => "opt-todo"}]
+              }
+            ]
+
+          true ->
+            []
+        end
+
+      {:ok, entries}
+    end
+
+    def get_task("task-todo") do
+      {:ok,
+       %{
+         "guid" => "task-todo",
+         "summary" => "Todo task",
+         "description" => "Ready to pick up"
+       }}
+    end
+  end
+
   setup do
     Application.put_env(:symphony_elixir, :lark_client_module, FakeLarkClient)
     Adapter.clear_cache_for_test()
@@ -84,6 +120,17 @@ defmodule SymphonyElixir.LarkAdapterTest do
     assert {:ok, tasks} = Adapter.fetch_issues_by_states(["Done"])
     assert Enum.map(tasks, & &1.id) == ["task-done"]
     assert Enum.at(tasks, 0).completed_at != nil
+  end
+
+  test "tasklist summaries drive state hydration when task details omit custom fields" do
+    Application.put_env(:symphony_elixir, :lark_client_module, SummaryStateLarkClient)
+    Adapter.clear_cache_for_test()
+
+    assert {:ok, [%{id: "task-todo", state: "Todo"} = task]} = Adapter.fetch_candidate_issues()
+    assert task.title == "Todo task"
+
+    assert {:ok, [%{id: "task-todo", state: "Todo"}]} =
+             Adapter.fetch_issue_states_by_ids(["task-todo"])
   end
 
   test "update_issue_state patches the Status field and terminal completion" do

@@ -37,6 +37,7 @@ The full manual path lives in [`elixir/README.md`](elixir/README.md). It covers:
 - how to create the Lark app and grant Task permissions
 - how to create the shared tasklist and `Status` field
 - how to obtain `tasklist_guid`
+- the default 5 second polling interval
 - how to run Symphony with `WORKFLOW.lark.md`
 
 ## Upstream Sync

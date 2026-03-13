@@ -14,7 +14,7 @@ tracker:
   terminal_states: ["Done"]
   complete_terminal_tasks: true
 polling:
-  interval_ms: 30000
+  interval_ms: 5000
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 agent:

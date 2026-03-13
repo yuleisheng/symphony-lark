@@ -766,7 +766,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     :sys.replace_state(pid, fn state ->
       %{
         state
-        | poll_interval_ms: 30_000,
+        | poll_interval_ms: 5_000,
           tick_timer_ref: nil,
           tick_token: make_ref(),
           next_poll_due_at_ms: now_ms + 4_000,
@@ -779,7 +779,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert %{
              polling: %{
                checking?: false,
-               poll_interval_ms: 30_000,
+               poll_interval_ms: 5_000,
                next_poll_in_ms: due_in_ms
              }
            } = snapshot
@@ -1038,7 +1038,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
          retrying: [],
          codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
          rate_limits: nil,
-         polling: %{checking?: false, next_poll_in_ms: 2_000, poll_interval_ms: 30_000}
+         polling: %{checking?: false, next_poll_in_ms: 2_000, poll_interval_ms: 5_000}
        }}
 
     waiting_rendered = StatusDashboard.format_snapshot_content_for_test(waiting_snapshot, 0.0)
@@ -1052,7 +1052,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
          retrying: [],
          codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0},
          rate_limits: nil,
-         polling: %{checking?: true, next_poll_in_ms: nil, poll_interval_ms: 30_000}
+         polling: %{checking?: true, next_poll_in_ms: nil, poll_interval_ms: 5_000}
        }}
 
     checking_rendered = StatusDashboard.format_snapshot_content_for_test(checking_snapshot, 0.0)

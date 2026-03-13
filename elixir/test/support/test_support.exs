@@ -111,7 +111,7 @@ defmodule SymphonyElixir.TestSupport do
           tracker_active_states: ["Todo", "In Progress", "Blocked", "In Review"],
           tracker_terminal_states: ["Done"],
           tracker_complete_terminal_tasks: true,
-          poll_interval_ms: 30_000,
+          poll_interval_ms: 5_000,
           workspace_root: Path.join(System.tmp_dir!(), "symphony_workspaces"),
           worker_ssh_hosts: [],
           worker_max_concurrent_agents_per_host: nil,

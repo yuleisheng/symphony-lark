@@ -84,6 +84,8 @@ tracker:
   active_states: ["Todo", "In Progress", "Blocked", "In Review"]
   terminal_states: ["Done"]
   complete_terminal_tasks: true
+polling:
+  interval_ms: 5000
 workspace:
   root: $SYMPHONY_WORKSPACE_ROOT
 codex:
@@ -95,6 +97,7 @@ Notes:
 - `tracker.app_id` falls back to `LARK_APP_ID`.
 - `tracker.app_secret` falls back to `LARK_APP_SECRET`.
 - `tracker.tasklist_guid` falls back to `LARK_TASKLIST_GUID`.
+- The default workflow polls every 5 seconds unless `polling.interval_ms` is overridden.
 - Moving a task into a terminal state also sets `completed_at` when `complete_terminal_tasks` is `true`.
 - The workflow prompt should use `task.*` variables. `issue.*` is still available as a compatibility alias, but new workflows should use `task`.
 
