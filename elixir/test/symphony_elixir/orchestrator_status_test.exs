@@ -971,6 +971,10 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
       send(pid, :run_poll_cycle)
 
+      assert_receive {:memory_tracker_comment, ^issue_id, body}, 2_000
+      assert body =~ "## Codex Workpad"
+      assert body =~ "Plan:"
+      assert body =~ "Status: In Progress."
       assert_receive {:memory_tracker_state_update, ^issue_id, "In Progress"}, 2_000
     after
       File.rm_rf(test_root)
