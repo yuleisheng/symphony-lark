@@ -88,11 +88,6 @@ defmodule SymphonyElixir.Lark.Adapter do
     end
   end
 
-  @spec list_comments(String.t()) :: {:ok, [map()]} | {:error, term()}
-  def list_comments(task_guid) when is_binary(task_guid) do
-    client_module().list_comments(task_guid)
-  end
-
   @spec update_issue_state(String.t(), String.t()) :: :ok | {:error, term()}
   def update_issue_state(task_guid, state_name)
       when is_binary(task_guid) and is_binary(state_name) do

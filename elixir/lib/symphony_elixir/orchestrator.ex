@@ -698,9 +698,8 @@ defmodule SymphonyElixir.Orchestrator do
 
         Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} worker_host=#{worker_host || "local"}")
 
-        should_bootstrap_workpad = todo_issue_state?(issue.state)
-        issue = maybe_mark_issue_in_progress(issue)
-        maybe_ensure_dispatch_workpad(issue, should_bootstrap_workpad)
+        {issue, transitioned_to_in_progress?} = maybe_mark_issue_in_progress(issue)
+        maybe_create_dispatch_workpad(issue, transitioned_to_in_progress?)
 
         running =
           Map.put(state.running, issue.id, %{
@@ -754,67 +753,32 @@ defmodule SymphonyElixir.Orchestrator do
       case Tracker.update_issue_state(issue_id, in_progress_state) do
         :ok ->
           Logger.info("Marked dispatched issue as in progress: #{issue_context(issue)} state=#{in_progress_state}")
-          %Task{issue | state: in_progress_state}
+          {%Task{issue | state: in_progress_state}, true}
 
         {:error, reason} ->
           Logger.warning("Failed to mark dispatched issue as in progress: #{issue_context(issue)} target_state=#{in_progress_state} reason=#{inspect(reason)}")
-          issue
+          {issue, false}
       end
     else
-      issue
+      {issue, false}
     end
   end
 
-  defp maybe_mark_issue_in_progress(issue), do: issue
+  defp maybe_mark_issue_in_progress(issue), do: {issue, false}
 
-  defp maybe_ensure_dispatch_workpad(%Task{id: issue_id} = issue, true) when is_binary(issue_id) do
-    case Tracker.list_comments(issue_id) do
-      {:ok, comments} ->
-        if workpad_comment_present?(comments) do
-          :ok
-        else
-          body = dispatch_workpad_comment(issue)
+  defp maybe_create_dispatch_workpad(%Task{id: issue_id} = issue, true) when is_binary(issue_id) do
+    body = dispatch_workpad_comment(issue)
 
-          case Tracker.create_comment(issue_id, body) do
-            :ok ->
-              Logger.info("Created dispatch workpad comment: #{issue_context(issue)}")
-
-            {:error, reason} ->
-              Logger.warning("Failed to create dispatch workpad comment: #{issue_context(issue)} reason=#{inspect(reason)}")
-          end
-        end
+    case Tracker.create_comment(issue_id, body) do
+      :ok ->
+        Logger.info("Created dispatch workpad comment: #{issue_context(issue)}")
 
       {:error, reason} ->
-        Logger.warning("Failed to inspect task comments before dispatch: #{issue_context(issue)} reason=#{inspect(reason)}")
+        Logger.warning("Failed to create dispatch workpad comment: #{issue_context(issue)} reason=#{inspect(reason)}")
     end
   end
 
-  defp maybe_ensure_dispatch_workpad(_issue, _should_bootstrap), do: :ok
-
-  defp workpad_comment_present?(comments) when is_list(comments) do
-    Enum.any?(comments, fn comment ->
-      case comment_content(comment) do
-        content when is_binary(content) ->
-          String.contains?(content, "## Codex Workpad")
-
-        _ ->
-          false
-      end
-    end)
-  end
-
-  defp workpad_comment_present?(_comments), do: false
-
-  defp comment_content(comment) when is_map(comment) do
-    Map.get(comment, "content") ||
-      Map.get(comment, :content) ||
-      get_in(comment, ["comment", "content"]) ||
-      get_in(comment, [:comment, :content]) ||
-      Map.get(comment, "body") ||
-      Map.get(comment, :body)
-  end
-
-  defp comment_content(_comment), do: nil
+  defp maybe_create_dispatch_workpad(_issue, _transitioned_to_in_progress?), do: :ok
 
   defp dispatch_workpad_comment(%Task{} = issue) do
     """
@@ -837,12 +801,6 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp dispatch_plan_summary(_issue), do: "the task"
-
-  defp todo_issue_state?(state_name) when is_binary(state_name) do
-    normalize_issue_state(state_name) == normalize_issue_state(Config.settings!().tracker.todo_state)
-  end
-
-  defp todo_issue_state?(_state_name), do: false
 
   defp revalidate_issue_for_dispatch(%Task{id: issue_id}, issue_fetcher, terminal_states)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do
