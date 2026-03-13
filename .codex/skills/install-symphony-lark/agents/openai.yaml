@@ -1,0 +1,7 @@
+interface:
+  display_name: "Install Symphony Lark"
+  short_description: "Clone, configure, and run Symphony for Lark Tasks."
+  default_prompt: "Use $install-symphony-lark to set up Symphony Lark in an explicit target path."
+
+policy:
+  allow_implicit_invocation: true
