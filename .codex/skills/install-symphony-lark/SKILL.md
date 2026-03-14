@@ -25,8 +25,8 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - target clone path
 - repo URL, if the user wants a different fork or remote
 - the local repo path Symphony should work on via `SYMPHONY_REPO_ROOT`
-- whether the user already has `LARK_APP_ID`, `LARK_APP_SECRET`, and `LARK_TASKLIST_GUID`
-- the human user's actual Feishu/Lark account email when tasklist bootstrap is needed
+- whether the user already has `LARK_APP_ID`, `LARK_APP_SECRET`, and `LARK_TASKLIST_GUID`, or wants the skill to create the tasklist
+- the human user's actual Feishu/Lark account email, only when tasklist bootstrap is needed
 
 ## Steps
 
@@ -56,11 +56,18 @@ mise exec -- mix build
    - confirm `LARK_APP_ID`
    - confirm `LARK_APP_SECRET`
    - confirm `SYMPHONY_REPO_ROOT` points at the repo the agents should modify
+   - if `gh auth status` fails, stop and tell the user to log in before continuing
    - if `LARK_TASKLIST_GUID` exists, verify the app can list tasks and custom fields for it
    - if the app cannot read the configured tasklist, continue into API-driven Lark setup
 5. Guided Lark setup when needed.
    - create or identify the Lark app in Open Platform
-   - confirm Task v2 read, patch, tasklist, custom-field, and comment permissions
+   - confirm the app has the Task and Contact permissions needed to:
+     - read and patch tasks
+     - list tasklist tasks and custom fields
+     - read and create task comments
+     - create tasklists
+     - add tasklist members
+     - create custom fields
    - confirm `contact:user.id:readonly`
    - use the user's actual account email for ID lookup; enterprise email may not return `open_id`
    - prefer API bootstrap over user-selected tasklists:
@@ -104,4 +111,5 @@ Add `--port 4000` if the user wants the dashboard.
 - `open.larksuite.com` and `open.feishu.cn` may both work in some tenants; keep the workflow endpoint aligned with the base that actually passes the tasklist probes.
 - The default workflow expects `SYMPHONY_REPO_ROOT` so each task workspace contains a real repo checkout instead of an empty temp directory.
 - The supported workflow states are `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, and `Done`.
+- The lowest-friction path is to let the skill create the tasklist and `Status` field instead of asking the user to find an existing tasklist GUID by hand.
 - If blocked, report the exact missing tool, env var, permission, or tasklist/status setup item.

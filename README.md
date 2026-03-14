@@ -39,9 +39,10 @@ Then restart Codex and invoke it with:
 The full manual path lives in [`elixir/README.md`](elixir/README.md). It covers:
 
 - required env vars
-- how to create the Lark app and grant Task permissions
-- how to create the shared tasklist and `Status` field
-- how to obtain `tasklist_guid`
+- how to create the Lark app and grant the required read/write permissions
+- how to bootstrap an app-owned or shared tasklist and the `Status` field
+- how `LARK_TASKLIST_GUID` is created or discovered
+- how to set `SYMPHONY_REPO_ROOT` and verify GitHub auth
 - the default 5 second polling interval
 - how to run Symphony with `WORKFLOW.lark.md`
 

@@ -1,6 +1,6 @@
 # Symphony Elixir For Lark Tasks
 
-This directory contains the Elixir/OTP implementation of Symphony for Lark Tasks. It polls one shared tasklist, creates a workspace per task, runs Codex in app-server mode, keeps a workpad comment on the task, and advances task status through a tasklist-scoped `Status` field.
+This directory contains the Elixir/OTP implementation of Symphony for Lark Tasks. It polls one Lark tasklist, creates a workspace per task, runs Codex in app-server mode, keeps a workpad comment on the task, and advances task status through a tasklist-scoped `Status` field.
 
 ## Preferred Setup Path
 
@@ -19,8 +19,8 @@ The skill is the supported onboarding path. It requires an explicit target clone
 - a Lark app with Task API access
 - `LARK_APP_ID`
 - `LARK_APP_SECRET`
-- a shared Lark tasklist for Symphony
-- `LARK_TASKLIST_GUID`
+- an app-readable Lark tasklist for Symphony, or permission to let the install skill create one
+- `LARK_TASKLIST_GUID` after bootstrap
 - `SYMPHONY_REPO_ROOT`
 
 ## Manual Lark Setup
@@ -39,11 +39,14 @@ Grant the Task v2 permissions used by this fork. At minimum, the app needs acces
 - list tasklist custom fields
 - read task comments
 - create task comments
+- create tasklists
+- add tasklist members
+- create custom fields
 - `contact:user.id:readonly`
 
-### 3. Create the shared tasklist
+### 3. Create the Symphony tasklist
 
-Create or choose one shared tasklist dedicated to Symphony runs.
+The lowest-friction path is to let `install-symphony-lark` create an app-owned tasklist, share it back to the human user, and write the resulting `LARK_TASKLIST_GUID`. If you are doing this manually, create or choose one tasklist dedicated to Symphony runs and make sure the app can read it.
 
 ### 4. Add the `Status` field
 
@@ -60,7 +63,7 @@ The default workflow expects those exact names.
 
 ### 5. Get the tasklist GUID
 
-The supported path is to use `install-symphony-lark`, which can guide you through discovery. If you need the manual fallback, use the Lark Task v2 API and inspect the tasklist object you plan to automate.
+The supported path is to use `install-symphony-lark`, which can usually create the tasklist and write `LARK_TASKLIST_GUID` for you. If you need the manual fallback, use the Lark Task v2 API and inspect the tasklist object you plan to automate.
 
 Set:
 
