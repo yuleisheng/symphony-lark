@@ -4,10 +4,9 @@ Symphony Lark is a Lark Tasks fork of [OpenAI Symphony](https://github.com/opena
 
 [![Symphony demo video preview](.github/media/symphony-demo-poster.jpg)](.github/media/symphony-demo.mp4)
 
-## Notes
-
-- Symphony has not been optimized for token consumption yet. Watch your token usage and cost closely while using it.
-- [`elixir/WORKFLOW.lark.md`](elixir/WORKFLOW.lark.md) is the main place to reduce token consumption. If you find prompt or workflow changes that cut tokens without hurting behavior, feel free to submit a PR.
+> [!WARNING]
+> Symphony has not been optimized for token consumption yet. Watch your token usage and cost closely while using it.
+> [`elixir/WORKFLOW.lark.md`](elixir/WORKFLOW.lark.md) is the main place to reduce token consumption. If you find prompt or workflow changes that cut tokens without hurting behavior, feel free to submit a PR.
 
 ## What Changed
 
@@ -45,6 +44,19 @@ The full manual path lives in [`elixir/README.md`](elixir/README.md). It covers:
 - how to set `SYMPHONY_REPO_ROOT` and verify GitHub auth
 - the default 5 second polling interval
 - how to run Symphony with `WORKFLOW.lark.md`
+
+## Agent Status Flow
+
+Symphony treats the tasklist-scoped `Status` field as the workflow source of truth.
+
+- `Todo`: runnable. The agent reads the task, inspects the repo, posts a plan comment, and Symphony moves the task to `In Progress` when dispatch starts.
+- `In Progress`: runnable. The agent is actively implementing or validating work.
+- `Blocked`: not runnable. The agent moves the task here when it cannot continue and adds a concise blocker comment with the exact human input needed.
+- `Input/Feedback Given`: runnable. A human uses this to re-queue a blocked task or PR feedback. Symphony injects the latest task comment into the next run, then moves the task back to `In Progress`.
+- `In Review`: not runnable. The agent moves the task here after publishing a PR, adding a handoff comment with `Goal`, `Solution`, `Verification Plan`, and the PR link.
+- `Done`: terminal. The agent moves the task here only when the requested work is complete. If the task involved code changes, the expected path is PR first, then `In Review`, then `Done`.
+
+The fuller workflow contract lives in [`elixir/README.md`](elixir/README.md#agent-status-behavior).
 
 ## Upstream Sync
 
