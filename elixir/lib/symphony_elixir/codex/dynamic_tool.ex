@@ -8,7 +8,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   @lark_task_api_tool "lark_task_api"
   @lark_task_api_prefix "/open-apis/task/v2/"
   @lark_task_api_description """
-  Execute an authenticated Lark Task v2 API request using Symphony's configured tenant credentials.
+  Execute an authenticated Lark Task API request using Symphony's configured tenant credentials.
   """
   @lark_task_api_input_schema %{
     "type" => "object",
@@ -18,7 +18,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       "method" => %{
         "type" => "string",
         "enum" => ["GET", "POST", "PATCH"],
-        "description" => "HTTP method for the Lark Task v2 API request."
+        "description" => "HTTP method for the Lark Task API request."
       },
       "path" => %{
         "type" => "string",
@@ -105,7 +105,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
       trimmed == "" ->
         {:error, :missing_lark_path}
 
-      String.starts_with?(trimmed, @lark_task_api_prefix) ->
+      lark_task_api_path?(trimmed) ->
         {:ok, trimmed}
 
       true ->
@@ -114,6 +114,10 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   end
 
   defp normalize_path(path), do: {:error, {:unsupported_lark_path, path}}
+
+  defp lark_task_api_path?(path) do
+    String.starts_with?(path, @lark_task_api_prefix)
+  end
 
   defp normalize_optional_map(nil, _field), do: {:ok, nil}
   defp normalize_optional_map(%{} = map, _field), do: {:ok, map}
@@ -157,7 +161,7 @@ defmodule SymphonyElixir.Codex.DynamicTool do
   defp tool_error_payload(:missing_lark_path) do
     %{
       "error" => %{
-        "message" => "`lark_task_api.path` must be a non-empty Task v2 API path."
+        "message" => "`lark_task_api.path` must be a non-empty task API path under `/open-apis/task/v2/*`."
       }
     }
   end

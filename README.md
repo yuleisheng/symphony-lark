@@ -4,6 +4,11 @@ Symphony Lark is a Lark Tasks fork of [OpenAI Symphony](https://github.com/opena
 
 [![Symphony demo video preview](.github/media/symphony-demo-poster.jpg)](.github/media/symphony-demo.mp4)
 
+## Notes
+
+- Symphony has not been optimized for token consumption yet. Watch your token usage and cost closely while using it.
+- [`elixir/WORKFLOW.lark.md`](elixir/WORKFLOW.lark.md) is the main place to reduce token consumption. If you find prompt or workflow changes that cut tokens without hurting behavior, feel free to submit a PR.
+
 ## What Changed
 
 - Lark Tasks replaces Linear as the only supported tracker.

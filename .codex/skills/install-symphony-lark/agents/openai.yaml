@@ -1,7 +1,7 @@
 interface:
   display_name: "Install Symphony Lark"
-  short_description: "Clone, bootstrap Lark auth and tasklists, and run Symphony."
-  default_prompt: "Use $install-symphony-lark to set up Symphony Lark in an explicit target path, including app bootstrap, tasklist creation, and Status setup."
+  short_description: "Clone, bootstrap Lark auth and tasklists, verify repo/workspace setup, and run Symphony."
+  default_prompt: "Use $install-symphony-lark to set up Symphony Lark in an explicit target path, including GitHub auth checks, SYMPHONY_REPO_ROOT setup, app bootstrap, tasklist creation, and Status setup with Input/Feedback Given."
 
 policy:
   allow_implicit_invocation: true

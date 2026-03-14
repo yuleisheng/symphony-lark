@@ -435,7 +435,7 @@ defmodule SymphonyElixir.AppServerTest do
                          "name" => "lark_task_api"
                        }
                      ] ->
-                       description =~ "Lark Task v2"
+                       description =~ "Lark Task API"
 
                      _ ->
                        false
@@ -1190,12 +1190,16 @@ defmodule SymphonyElixir.AppServerTest do
         labels: ["backend"]
       }
 
+      test_pid = self()
+      on_message = fn message -> send(test_pid, {:app_server_message, message}) end
+
       log =
         capture_log(fn ->
-          assert {:ok, _result} = AppServer.run(workspace, "Capture stderr log", issue)
+          assert {:ok, _result} = AppServer.run(workspace, "Capture stderr log", issue, on_message: on_message)
         end)
 
       assert log =~ "Codex turn stream output: warning: this is stderr noise"
+      refute_received {:app_server_message, %{event: :malformed}}
     after
       File.rm_rf(test_root)
     end
@@ -1295,7 +1299,7 @@ defmodule SymphonyElixir.AppServerTest do
         "type" => "workspaceWrite",
         "writableRoots" => [remote_workspace],
         "readOnlyAccess" => %{"type" => "fullAccess"},
-        "networkAccess" => false,
+        "networkAccess" => true,
         "excludeTmpdirEnvVar" => false,
         "excludeSlashTmp" => false
       }

@@ -21,7 +21,7 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
              }
            ] = DynamicTool.tool_specs()
 
-    assert description =~ "Lark Task v2"
+    assert description =~ "Lark Task API"
   end
 
   test "unsupported tools return a failure payload with the supported tool list" do
@@ -139,6 +139,39 @@ defmodule SymphonyElixir.Codex.DynamicToolTest do
                "method" => ~s("DELETE")
              }
            }
+  end
+
+  test "lark_task_api accepts task v2 comment paths" do
+    test_pid = self()
+
+    response =
+      DynamicTool.execute(
+        "lark_task_api",
+        %{
+          "method" => "POST",
+          "path" => "/open-apis/task/v2/comments",
+          "body" => %{
+            "content" => "hello from codex",
+            "resource_type" => "task",
+            "resource_id" => "task-123"
+          }
+        },
+        lark_request_fun: fn method, path, opts ->
+          send(test_pid, {:lark_request_called, method, path, opts})
+          {:ok, %{"code" => 0, "data" => %{"comment_id" => "comment-123"}}}
+        end
+      )
+
+    assert_received {:lark_request_called, :post, "/open-apis/task/v2/comments", opts}
+
+    assert Keyword.get(opts, :body) == %{
+             "content" => "hello from codex",
+             "resource_type" => "task",
+             "resource_id" => "task-123"
+           }
+
+    assert response["success"] == true
+    assert Jason.decode!(response["output"]) == %{"code" => 0, "data" => %{"comment_id" => "comment-123"}}
   end
 
   test "lark_task_api formats auth, API, and transport failures" do

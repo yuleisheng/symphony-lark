@@ -147,7 +147,11 @@ defmodule SymphonyElixir.AgentRunner do
     end
   end
 
-  defp build_turn_prompt(issue, opts, 1, _max_turns), do: PromptBuilder.build_prompt(issue, opts)
+  defp build_turn_prompt(issue, opts, 1, _max_turns) do
+    issue
+    |> maybe_attach_resume_comment()
+    |> PromptBuilder.build_prompt(opts)
+  end
 
   defp build_turn_prompt(_issue, _opts, turn_number, max_turns) do
     """
@@ -182,12 +186,60 @@ defmodule SymphonyElixir.AgentRunner do
 
   defp active_issue_state?(state_name) when is_binary(state_name) do
     normalized_state = normalize_issue_state(state_name)
+    non_runnable_states = non_runnable_issue_states()
 
-    Config.settings!().tracker.active_states
-    |> Enum.any?(fn active_state -> normalize_issue_state(active_state) == normalized_state end)
+    not MapSet.member?(non_runnable_states, normalized_state) and
+      Enum.any?(Config.settings!().tracker.active_states, fn active_state ->
+        normalize_issue_state(active_state) == normalized_state
+      end)
   end
 
   defp active_issue_state?(_state_name), do: false
+
+  defp maybe_attach_resume_comment(%Task{id: issue_id, state: state_name} = issue)
+       when is_binary(issue_id) and is_binary(state_name) do
+    if normalize_issue_state(state_name) == feedback_issue_state() do
+      case Tracker.latest_comment(issue_id) do
+        {:ok, %{} = comment} ->
+          %Task{
+            issue
+            | latest_comment: latest_comment_content(comment),
+              resume_comment_required: true
+          }
+
+        {:ok, nil} ->
+          %Task{issue | latest_comment: nil, resume_comment_required: true}
+
+        {:error, reason} ->
+          Logger.warning("Failed to load latest feedback comment for #{issue_context(issue)}: #{inspect(reason)}")
+          %Task{issue | latest_comment: nil, resume_comment_required: true}
+      end
+    else
+      issue
+    end
+  end
+
+  defp maybe_attach_resume_comment(issue), do: issue
+
+  defp latest_comment_content(comment) when is_map(comment) do
+    case Map.get(comment, "content") || Map.get(comment, :content) do
+      value when is_binary(value) and value != "" -> value
+      _ -> nil
+    end
+  end
+
+  defp non_runnable_issue_states do
+    tracker = Config.settings!().tracker
+
+    [tracker.blocked_state, tracker.review_state]
+    |> Enum.map(&normalize_issue_state/1)
+    |> MapSet.new()
+  end
+
+  defp feedback_issue_state do
+    Config.settings!().tracker.feedback_state
+    |> normalize_issue_state()
+  end
 
   defp candidate_worker_hosts(nil, []), do: [nil]
 

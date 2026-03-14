@@ -8,6 +8,7 @@ defmodule SymphonyElixir.Tracker.Task do
     :identifier,
     :title,
     :description,
+    :latest_comment,
     :priority,
     :state,
     :branch_name,
@@ -16,6 +17,7 @@ defmodule SymphonyElixir.Tracker.Task do
     :completed_at,
     blocked_by: [],
     labels: [],
+    resume_comment_required: false,
     assigned_to_worker: true,
     created_at: nil,
     updated_at: nil
@@ -26,6 +28,7 @@ defmodule SymphonyElixir.Tracker.Task do
           identifier: String.t() | nil,
           title: String.t() | nil,
           description: String.t() | nil,
+          latest_comment: String.t() | nil,
           priority: integer() | nil,
           state: String.t() | nil,
           branch_name: String.t() | nil,

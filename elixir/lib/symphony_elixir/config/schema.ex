@@ -53,9 +53,10 @@ defmodule SymphonyElixir.Config.Schema do
       field(:todo_state, :string, default: "Todo")
       field(:in_progress_state, :string, default: "In Progress")
       field(:blocked_state, :string, default: "Blocked")
+      field(:feedback_state, :string, default: "Input/Feedback Given")
       field(:review_state, :string, default: "In Review")
       field(:done_state, :string, default: "Done")
-      field(:active_states, {:array, :string}, default: ["Todo", "In Progress", "Blocked", "In Review"])
+      field(:active_states, {:array, :string}, default: ["Todo", "In Progress", "Input/Feedback Given"])
       field(:terminal_states, {:array, :string}, default: ["Done"])
       field(:complete_terminal_tasks, :boolean, default: true)
     end
@@ -74,6 +75,7 @@ defmodule SymphonyElixir.Config.Schema do
           :todo_state,
           :in_progress_state,
           :blocked_state,
+          :feedback_state,
           :review_state,
           :done_state,
           :active_states,
@@ -497,7 +499,7 @@ defmodule SymphonyElixir.Config.Schema do
       "type" => "workspaceWrite",
       "writableRoots" => [workspace],
       "readOnlyAccess" => %{"type" => "fullAccess"},
-      "networkAccess" => false,
+      "networkAccess" => true,
       "excludeTmpdirEnvVar" => false,
       "excludeSlashTmp" => false
     }

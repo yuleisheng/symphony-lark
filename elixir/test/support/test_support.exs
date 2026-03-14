@@ -107,9 +107,10 @@ defmodule SymphonyElixir.TestSupport do
           tracker_todo_state: "Todo",
           tracker_in_progress_state: "In Progress",
           tracker_blocked_state: "Blocked",
+          tracker_feedback_state: "Input/Feedback Given",
           tracker_review_state: "In Review",
           tracker_done_state: "Done",
-          tracker_active_states: ["Todo", "In Progress", "Blocked", "In Review"],
+          tracker_active_states: ["Todo", "In Progress", "Input/Feedback Given"],
           tracker_terminal_states: ["Done"],
           tracker_complete_terminal_tasks: true,
           poll_interval_ms: 5_000,
@@ -150,6 +151,7 @@ defmodule SymphonyElixir.TestSupport do
     tracker_todo_state = Keyword.get(config, :tracker_todo_state, "Todo")
     tracker_in_progress_state = Keyword.get(config, :tracker_in_progress_state, "In Progress")
     tracker_blocked_state = Keyword.get(config, :tracker_blocked_state, "Blocked")
+    tracker_feedback_state = Keyword.get(config, :tracker_feedback_state, "Input/Feedback Given")
     tracker_review_state = Keyword.get(config, :tracker_review_state, "In Review")
     tracker_done_state = Keyword.get(config, :tracker_done_state, "Done")
     tracker_active_states = Keyword.get(config, :tracker_active_states)
@@ -194,6 +196,7 @@ defmodule SymphonyElixir.TestSupport do
         "  todo_state: #{yaml_value(tracker_todo_state)}",
         "  in_progress_state: #{yaml_value(tracker_in_progress_state)}",
         "  blocked_state: #{yaml_value(tracker_blocked_state)}",
+        "  feedback_state: #{yaml_value(tracker_feedback_state)}",
         "  review_state: #{yaml_value(tracker_review_state)}",
         "  done_state: #{yaml_value(tracker_done_state)}",
         "  active_states: #{yaml_value(tracker_active_states)}",

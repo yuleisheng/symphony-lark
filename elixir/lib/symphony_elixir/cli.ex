@@ -3,7 +3,7 @@ defmodule SymphonyElixir.CLI do
   Escript entrypoint for running Symphony with an explicit workflow file path.
   """
 
-  alias SymphonyElixir.LogFile
+  alias SymphonyElixir.{Config, LogFile}
 
   @acknowledgement_switch :i_understand_that_this_will_be_running_without_the_usual_guardrails
   @switches [{@acknowledgement_switch, :boolean}, logs_root: :string, port: :integer]
@@ -14,6 +14,7 @@ defmodule SymphonyElixir.CLI do
           set_workflow_file_path: (String.t() -> :ok | {:error, term()}),
           set_logs_root: (String.t() -> :ok | {:error, term()}),
           set_server_port_override: (non_neg_integer() | nil -> :ok | {:error, term()}),
+          validate_config: (-> :ok | {:error, term()}),
           ensure_all_started: (-> ensure_started_result())
         }
 
@@ -58,9 +59,12 @@ defmodule SymphonyElixir.CLI do
     if deps.file_regular?.(expanded_path) do
       :ok = deps.set_workflow_file_path.(expanded_path)
 
-      case deps.ensure_all_started.() do
-        {:ok, _started_apps} ->
-          :ok
+      with :ok <- validate_config(deps, expanded_path),
+           {:ok, _started_apps} <- deps.ensure_all_started.() do
+        :ok
+      else
+        {:error, {:invalid_startup_config, message}} ->
+          {:error, message}
 
         {:error, reason} ->
           {:error, "Failed to start Symphony with workflow #{expanded_path}: #{inspect(reason)}"}
@@ -82,8 +86,21 @@ defmodule SymphonyElixir.CLI do
       set_workflow_file_path: &SymphonyElixir.Workflow.set_workflow_file_path/1,
       set_logs_root: &set_logs_root/1,
       set_server_port_override: &set_server_port_override/1,
+      validate_config: &Config.validate!/0,
       ensure_all_started: fn -> Application.ensure_all_started(:symphony_elixir) end
     }
+  end
+
+  defp validate_config(deps, expanded_path) do
+    validate_config_fun = Map.get(deps, :validate_config, fn -> :ok end)
+
+    case validate_config_fun.() do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        {:error, {:invalid_startup_config, "Invalid startup configuration for workflow #{expanded_path}: #{Config.format_validation_error(reason)}"}}
+    end
   end
 
   defp maybe_set_logs_root(opts, deps) do

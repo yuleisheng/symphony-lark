@@ -60,6 +60,14 @@ defmodule SymphonyElixir.LarkAdapterTest do
       {:ok, %{"code" => 0}}
     end
 
+    def list_comments("task-open") do
+      {:ok,
+       [
+         %{"comment_id" => "comment-1", "content" => "older", "created_at" => "2026-03-13T00:00:00Z"},
+         %{"comment_id" => "comment-2", "content" => "latest", "created_at" => "2026-03-14T00:00:00Z"}
+       ]}
+    end
+
     def patch_task(task_guid, attrs) do
       send(self(), {:fake_lark_patch, task_guid, attrs})
       {:ok, %{"code" => 0}}
@@ -145,5 +153,10 @@ defmodule SymphonyElixir.LarkAdapterTest do
   test "create_comment delegates to the Lark client" do
     assert :ok = Adapter.create_comment("task-open", "hello from codex")
     assert_received {:fake_lark_comment, "task-open", "hello from codex"}
+  end
+
+  test "latest_comment returns the newest task comment" do
+    assert {:ok, %{"comment_id" => "comment-2", "content" => "latest"}} =
+             Adapter.latest_comment("task-open")
   end
 end

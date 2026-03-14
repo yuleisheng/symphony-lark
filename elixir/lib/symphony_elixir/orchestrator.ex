@@ -350,6 +350,16 @@ defmodule SymphonyElixir.Orchestrator do
 
         terminate_running_issue(state, issue.id, true)
 
+      blocked_issue_state?(issue.state) ->
+        Logger.info("Issue moved to blocked state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
+
+        terminate_running_issue(state, issue.id, false)
+
+      review_issue_state?(issue.state) ->
+        Logger.info("Issue moved to review state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
+
+        terminate_running_issue(state, issue.id, false)
+
       !issue_routable_to_worker?(issue) ->
         Logger.info("Issue no longer routed to this worker: #{issue_context(issue)} assignee=#{inspect(issue.assignee_id)}; stopping active agent")
 
@@ -635,8 +645,25 @@ defmodule SymphonyElixir.Orchestrator do
   defp terminal_issue_state?(_state_name, _terminal_states), do: false
 
   defp active_issue_state?(state_name, active_states) when is_binary(state_name) do
-    MapSet.member?(active_states, normalize_issue_state(state_name))
+    normalized_state = normalize_issue_state(state_name)
+
+    not MapSet.member?(non_runnable_issue_states(), normalized_state) and
+      MapSet.member?(active_states, normalized_state)
   end
+
+  defp active_issue_state?(_state_name, _active_states), do: false
+
+  defp blocked_issue_state?(state_name) when is_binary(state_name) do
+    normalize_issue_state(state_name) == blocked_issue_state()
+  end
+
+  defp blocked_issue_state?(_state_name), do: false
+
+  defp review_issue_state?(state_name) when is_binary(state_name) do
+    normalize_issue_state(state_name) == review_issue_state()
+  end
+
+  defp review_issue_state?(_state_name), do: false
 
   defp normalize_issue_state(state_name) when is_binary(state_name) do
     String.downcase(String.trim(state_name))
@@ -652,8 +679,22 @@ defmodule SymphonyElixir.Orchestrator do
   defp active_state_set do
     Config.settings!().tracker.active_states
     |> Enum.map(&normalize_issue_state/1)
-    |> Enum.filter(&(&1 != ""))
+    |> Enum.reject(&MapSet.member?(non_runnable_issue_states(), &1))
     |> MapSet.new()
+  end
+
+  defp blocked_issue_state do
+    Config.settings!().tracker.blocked_state
+    |> normalize_issue_state()
+  end
+
+  defp review_issue_state do
+    Config.settings!().tracker.review_state
+    |> normalize_issue_state()
+  end
+
+  defp non_runnable_issue_states do
+    MapSet.new([blocked_issue_state(), review_issue_state(), ""])
   end
 
   defp dispatch_issue(%State{} = state, issue, attempt \\ nil, preferred_worker_host \\ nil) do
@@ -698,8 +739,7 @@ defmodule SymphonyElixir.Orchestrator do
 
         Logger.info("Dispatching issue to agent: #{issue_context(issue)} pid=#{inspect(pid)} attempt=#{inspect(attempt)} worker_host=#{worker_host || "local"}")
 
-        {issue, transitioned_to_in_progress?} = maybe_mark_issue_in_progress(issue)
-        maybe_create_dispatch_workpad(issue, transitioned_to_in_progress?)
+        {issue, _transitioned_to_in_progress?} = maybe_mark_issue_in_progress(issue)
 
         running =
           Map.put(state.running, issue.id, %{
@@ -747,9 +787,13 @@ defmodule SymphonyElixir.Orchestrator do
   defp maybe_mark_issue_in_progress(%Task{id: issue_id, state: state_name} = issue)
        when is_binary(issue_id) and is_binary(state_name) do
     todo_state = Config.settings!().tracker.todo_state
+    feedback_state = Config.settings!().tracker.feedback_state
     in_progress_state = Config.settings!().tracker.in_progress_state
 
-    if normalize_issue_state(state_name) == normalize_issue_state(todo_state) do
+    if normalize_issue_state(state_name) in [
+         normalize_issue_state(todo_state),
+         normalize_issue_state(feedback_state)
+       ] do
       case Tracker.update_issue_state(issue_id, in_progress_state) do
         :ok ->
           Logger.info("Marked dispatched issue as in progress: #{issue_context(issue)} state=#{in_progress_state}")
@@ -765,42 +809,6 @@ defmodule SymphonyElixir.Orchestrator do
   end
 
   defp maybe_mark_issue_in_progress(issue), do: {issue, false}
-
-  defp maybe_create_dispatch_workpad(%Task{id: issue_id} = issue, true) when is_binary(issue_id) do
-    body = dispatch_workpad_comment(issue)
-
-    case Tracker.create_comment(issue_id, body) do
-      :ok ->
-        Logger.info("Created dispatch workpad comment: #{issue_context(issue)}")
-
-      {:error, reason} ->
-        Logger.warning("Failed to create dispatch workpad comment: #{issue_context(issue)} reason=#{inspect(reason)}")
-    end
-  end
-
-  defp maybe_create_dispatch_workpad(_issue, _transitioned_to_in_progress?), do: :ok
-
-  defp dispatch_workpad_comment(%Task{} = issue) do
-    """
-    ## Codex Workpad
-    - Plan: Start implementation for #{dispatch_plan_summary(issue)} and refine this into concrete steps as work proceeds.
-    - Status: In Progress.
-    - Validation: Pending.
-    - Links: #{issue.url || "None yet."}
-    - Risks: None yet.
-    """
-    |> String.trim()
-  end
-
-  defp dispatch_plan_summary(%Task{title: title}) when is_binary(title) and title != "" do
-    inspect(title)
-  end
-
-  defp dispatch_plan_summary(%Task{identifier: identifier}) when is_binary(identifier) and identifier != "" do
-    "task #{identifier}"
-  end
-
-  defp dispatch_plan_summary(_issue), do: "the task"
 
   defp revalidate_issue_for_dispatch(%Task{id: issue_id}, issue_fetcher, terminal_states)
        when is_binary(issue_id) and is_function(issue_fetcher, 1) do

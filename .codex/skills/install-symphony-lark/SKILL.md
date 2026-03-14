@@ -1,6 +1,6 @@
 ---
 name: install-symphony-lark
-description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain, bootstrap Lark auth and tasklist access, and start the local service with WORKFLOW.lark.md.
+description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain and GitHub auth, bootstrap Lark auth and tasklist access, configure the target repo path for task workspaces, and start the local service with WORKFLOW.lark.md.
 ---
 
 # Install Symphony Lark
@@ -17,12 +17,14 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - Get a local `symphony-lark` checkout built and runnable.
 - Verify the required CLIs and auth.
 - Prefer app-driven Lark bootstrap when tasklist access is missing.
+- Ensure the default workflow can materialize the real repo into each task workspace.
 - Start Symphony with `elixir/WORKFLOW.lark.md`.
 
 ## Required Inputs
 
 - target clone path
 - repo URL, if the user wants a different fork or remote
+- the local repo path Symphony should work on via `SYMPHONY_REPO_ROOT`
 - whether the user already has `LARK_APP_ID`, `LARK_APP_SECRET`, and `LARK_TASKLIST_GUID`
 - the human user's actual Feishu/Lark account email when tasklist bootstrap is needed
 
@@ -34,8 +36,11 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
    - If present and dirty, show branch and status before pulling.
 2. Verify tools.
    - `git`
+   - `gh`
    - `mise`
    - `codex`
+   - `rsync`
+   - `gh auth status`
 3. Build Symphony.
 
 ```bash
@@ -50,6 +55,7 @@ mise exec -- mix build
    - `codex app-server --help`
    - confirm `LARK_APP_ID`
    - confirm `LARK_APP_SECRET`
+   - confirm `SYMPHONY_REPO_ROOT` points at the repo the agents should modify
    - if `LARK_TASKLIST_GUID` exists, verify the app can list tasks and custom fields for it
    - if the app cannot read the configured tasklist, continue into API-driven Lark setup
 5. Guided Lark setup when needed.
@@ -61,13 +67,15 @@ mise exec -- mix build
      - create the tasklist via API
      - look up the user's `open_id` via email
      - add the user as an editor to the app-created tasklist
-     - create the `Status` single-select field via API with exact options `Todo`, `In Progress`, `Blocked`, `In Review`, `Done`
+     - create the `Status` single-select field via API with exact options `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, `Done`
      - write back the final `LARK_TASKLIST_GUID`
+   - if the tasklist already has a `Status` field, verify it includes every required option; patch or recreate it before continuing
    - if an existing user-owned tasklist is unreadable by the app, stop treating it as the primary path and create an app-owned tasklist instead
 6. Start Symphony.
 
 ```bash
 cd <target>/elixir
+export SYMPHONY_REPO_ROOT="<repo-path>"
 mise exec -- ./bin/symphony \
   --i-understand-that-this-will-be-running-without-the-usual-guardrails \
   ./WORKFLOW.lark.md
@@ -80,6 +88,8 @@ Add `--port 4000` if the user wants the dashboard.
    - confirm the configured workflow loads
    - confirm Symphony can read the configured tasklist
    - confirm the `Status` field is visible to the app
+   - confirm the `Status` field options exactly match `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, `Done`
+   - confirm `gh` can reach GitHub so code-change tasks can publish PRs
 
 ## API Paths
 
@@ -92,4 +102,6 @@ Add `--port 4000` if the user wants the dashboard.
 
 - Prefer temporary `export` commands unless the user explicitly asks to modify shell startup files.
 - `open.larksuite.com` and `open.feishu.cn` may both work in some tenants; keep the workflow endpoint aligned with the base that actually passes the tasklist probes.
+- The default workflow expects `SYMPHONY_REPO_ROOT` so each task workspace contains a real repo checkout instead of an empty temp directory.
+- The supported workflow states are `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, and `Done`.
 - If blocked, report the exact missing tool, env var, permission, or tasklist/status setup item.

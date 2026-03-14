@@ -16,6 +16,41 @@ defmodule SymphonyElixir.LarkConfigTest do
     assert {:error, :missing_lark_tasklist_guid} = Config.validate!()
   end
 
+  test "config validates required workspace root env when workflow references it" do
+    previous_workspace_root = System.get_env("SYMPHONY_WORKSPACE_ROOT")
+
+    on_exit(fn ->
+      restore_env("SYMPHONY_WORKSPACE_ROOT", previous_workspace_root)
+    end)
+
+    System.delete_env("SYMPHONY_WORKSPACE_ROOT")
+    write_workflow_file!(Workflow.workflow_file_path(), workspace_root: "$SYMPHONY_WORKSPACE_ROOT")
+    assert {:error, :missing_symphony_workspace_root} = Config.validate!()
+
+    System.put_env("SYMPHONY_WORKSPACE_ROOT", "")
+    assert {:error, :missing_symphony_workspace_root} = Config.validate!()
+  end
+
+  test "config validates required repo root env when the default repo hook references it" do
+    previous_repo_root = System.get_env("SYMPHONY_REPO_ROOT")
+
+    on_exit(fn ->
+      restore_env("SYMPHONY_REPO_ROOT", previous_repo_root)
+    end)
+
+    System.delete_env("SYMPHONY_REPO_ROOT")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      workspace_root: Path.join(System.tmp_dir!(), "symphony_workspaces"),
+      hook_after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; git clone --local \"$SYMPHONY_REPO_ROOT\" ."
+    )
+
+    assert {:error, :missing_symphony_repo_root} = Config.validate!()
+
+    System.put_env("SYMPHONY_REPO_ROOT", "")
+    assert {:error, :missing_symphony_repo_root} = Config.validate!()
+  end
+
   test "Lark secrets resolve from environment variables" do
     previous_app_id = System.get_env("LARK_APP_ID")
     previous_app_secret = System.get_env("LARK_APP_SECRET")

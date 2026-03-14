@@ -117,6 +117,7 @@ defmodule SymphonyElixir.CLITest do
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,
+      validate_config: fn -> :ok end,
       ensure_all_started: fn -> {:error, :boom} end
     }
 
@@ -125,12 +126,43 @@ defmodule SymphonyElixir.CLITest do
     assert message =~ ":boom"
   end
 
+  test "returns startup error when required config is missing" do
+    deps = %{
+      file_regular?: fn _path -> true end,
+      set_workflow_file_path: fn _path -> :ok end,
+      set_logs_root: fn _path -> :ok end,
+      set_server_port_override: fn _port -> :ok end,
+      validate_config: fn -> {:error, :missing_symphony_workspace_root} end,
+      ensure_all_started: fn -> {:ok, [:symphony_elixir]} end
+    }
+
+    assert {:error, message} = CLI.evaluate([@ack_flag, "WORKFLOW.lark.md"], deps)
+    assert message =~ "Invalid startup configuration for workflow"
+    assert message =~ "SYMPHONY_WORKSPACE_ROOT"
+  end
+
+  test "returns startup error when repo root is missing for the default repo hook" do
+    deps = %{
+      file_regular?: fn _path -> true end,
+      set_workflow_file_path: fn _path -> :ok end,
+      set_logs_root: fn _path -> :ok end,
+      set_server_port_override: fn _port -> :ok end,
+      validate_config: fn -> {:error, :missing_symphony_repo_root} end,
+      ensure_all_started: fn -> {:ok, [:symphony_elixir]} end
+    }
+
+    assert {:error, message} = CLI.evaluate([@ack_flag, "WORKFLOW.lark.md"], deps)
+    assert message =~ "Invalid startup configuration for workflow"
+    assert message =~ "SYMPHONY_REPO_ROOT"
+  end
+
   test "returns ok when workflow exists and app starts" do
     deps = %{
       file_regular?: fn _path -> true end,
       set_workflow_file_path: fn _path -> :ok end,
       set_logs_root: fn _path -> :ok end,
       set_server_port_override: fn _port -> :ok end,
+      validate_config: fn -> :ok end,
       ensure_all_started: fn -> {:ok, [:symphony_elixir]} end
     }
 

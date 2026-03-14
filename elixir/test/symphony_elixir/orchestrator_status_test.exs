@@ -971,10 +971,87 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
       send(pid, :run_poll_cycle)
 
-      assert_receive {:memory_tracker_comment, ^issue_id, body}, 2_000
-      assert body =~ "## Codex Workpad"
-      assert body =~ "Plan:"
-      assert body =~ "Status: In Progress."
+      assert_receive {:memory_tracker_state_update, ^issue_id, "In Progress"}, 2_000
+      refute_receive {:memory_tracker_comment, ^issue_id, _body}, 200
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "orchestrator marks dispatched feedback issues as in progress" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-orchestrator-feedback-in-progress-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      issue_id = "issue-feedback-dispatch"
+
+      File.mkdir_p!(workspace_root)
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      count=0
+      while IFS= read -r _line; do
+        count=$((count + 1))
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-feedback"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-feedback"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        tracker_api_token: nil,
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server",
+        max_turns: 1
+      )
+
+      Application.put_env(:symphony_elixir, :tracker_adapter_override, SymphonyElixir.Tracker.Memory)
+      Application.put_env(:symphony_elixir, :memory_tracker_recipient, self())
+
+      Application.put_env(:symphony_elixir, :memory_tracker_issues, [
+        %Issue{
+          id: issue_id,
+          identifier: "MT-FEEDBACK",
+          title: "Feedback dispatch test",
+          description: "Verify dispatched feedback issues are marked in progress",
+          state: "Input/Feedback Given",
+          url: "https://example.org/issues/MT-FEEDBACK"
+        }
+      ])
+
+      orchestrator_name = Module.concat(__MODULE__, :FeedbackDispatchOrchestrator)
+      {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+      on_exit(fn ->
+        if Process.alive?(pid) do
+          Process.exit(pid, :normal)
+        end
+      end)
+
+      send(pid, :run_poll_cycle)
+
       assert_receive {:memory_tracker_state_update, ^issue_id, "In Progress"}, 2_000
     after
       File.rm_rf(test_root)

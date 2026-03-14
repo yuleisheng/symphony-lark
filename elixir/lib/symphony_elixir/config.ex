@@ -93,8 +93,35 @@ defmodule SymphonyElixir.Config do
 
   @spec validate!() :: :ok | {:error, term()}
   def validate! do
-    with {:ok, settings} <- settings() do
-      validate_semantics(settings)
+    with {:ok, workflow} <- Workflow.current(),
+         {:ok, settings} <- Schema.parse(workflow.config) do
+      validate_semantics(settings, workflow.config)
+    end
+  end
+
+  @spec format_validation_error(term()) :: String.t()
+  def format_validation_error(reason) do
+    case reason do
+      :missing_lark_app_id ->
+        "Lark app ID missing. Set `tracker.app_id` or export `LARK_APP_ID`."
+
+      :missing_lark_app_secret ->
+        "Lark app secret missing. Set `tracker.app_secret` or export `LARK_APP_SECRET`."
+
+      :missing_lark_tasklist_guid ->
+        "Lark tasklist GUID missing. Set `tracker.tasklist_guid` or export `LARK_TASKLIST_GUID`."
+
+      :missing_lark_state_field_name ->
+        "Lark state field name missing. Set `tracker.state_field_name`."
+
+      :missing_symphony_workspace_root ->
+        "Workspace root missing. Set `workspace.root` or export `SYMPHONY_WORKSPACE_ROOT`."
+
+      :missing_symphony_repo_root ->
+        "Repository root missing. Export `SYMPHONY_REPO_ROOT` for the default repo materialization hook."
+
+      other ->
+        format_config_error(other)
     end
   end
 
@@ -114,24 +141,82 @@ defmodule SymphonyElixir.Config do
     end
   end
 
-  defp validate_semantics(settings) do
+  defp validate_semantics(settings, workflow_config) do
     cond do
-      not is_binary(settings.tracker.app_id) ->
+      blank_string?(settings.tracker.app_id) ->
         {:error, :missing_lark_app_id}
 
-      not is_binary(settings.tracker.app_secret) ->
+      blank_string?(settings.tracker.app_secret) ->
         {:error, :missing_lark_app_secret}
 
-      not is_binary(settings.tracker.tasklist_guid) ->
+      blank_string?(settings.tracker.tasklist_guid) ->
         {:error, :missing_lark_tasklist_guid}
 
-      not is_binary(settings.tracker.state_field_name) ->
+      blank_string?(settings.tracker.state_field_name) ->
         {:error, :missing_lark_state_field_name}
+
+      missing_workspace_root?(settings.workspace.root, workflow_config) ->
+        {:error, :missing_symphony_workspace_root}
+
+      missing_repo_root?(workflow_config) ->
+        {:error, :missing_symphony_repo_root}
 
       true ->
         :ok
     end
   end
+
+  defp blank_string?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank_string?(_value), do: true
+
+  defp missing_workspace_root?(workspace_root, workflow_config) do
+    blank_string?(workspace_root) or
+      explicit_blank_workspace_root?(workflow_config) or
+      missing_env_reference?(get_in(workflow_config, ["workspace", "root"]), "SYMPHONY_WORKSPACE_ROOT")
+  end
+
+  defp missing_repo_root?(workflow_config) do
+    case get_in(workflow_config, ["hooks", "after_create"]) do
+      value when is_binary(value) ->
+        String.contains?(value, "$SYMPHONY_REPO_ROOT") and blank_string?(System.get_env("SYMPHONY_REPO_ROOT"))
+
+      _ ->
+        false
+    end
+  end
+
+  defp explicit_blank_workspace_root?(workflow_config) do
+    case get_in(workflow_config, ["workspace", "root"]) do
+      value when is_binary(value) -> String.trim(value) == ""
+      _ -> false
+    end
+  end
+
+  defp missing_env_reference?(value, expected_env_name) when is_binary(value) do
+    case config_env_reference_name(String.trim(value)) do
+      {:ok, ^expected_env_name} ->
+        case System.get_env(expected_env_name) do
+          nil -> true
+          "" -> true
+          _ -> false
+        end
+
+      _ ->
+        false
+    end
+  end
+
+  defp missing_env_reference?(_value, _expected_env_name), do: false
+
+  defp config_env_reference_name("$" <> env_name) do
+    if String.match?(env_name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/) do
+      {:ok, env_name}
+    else
+      :error
+    end
+  end
+
+  defp config_env_reference_name(_value), do: :error
 
   defp format_config_error(reason) do
     case reason do

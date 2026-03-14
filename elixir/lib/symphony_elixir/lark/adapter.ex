@@ -80,6 +80,17 @@ defmodule SymphonyElixir.Lark.Adapter do
     end
   end
 
+  @spec latest_comment(String.t()) :: {:ok, map() | nil} | {:error, term()}
+  def latest_comment(task_guid) when is_binary(task_guid) do
+    case client_module().list_comments(task_guid) do
+      {:ok, comments} when is_list(comments) ->
+        {:ok, pick_latest_comment(comments)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   def create_comment(task_guid, body) when is_binary(task_guid) and is_binary(body) do
     case client_module().create_comment(task_guid, body) do
@@ -457,9 +468,12 @@ defmodule SymphonyElixir.Lark.Adapter do
 
   defp active_task_state?(state_name) do
     normalized_state = normalize_state(state_name)
+    non_runnable_states = non_runnable_task_states()
 
-    Config.settings!().tracker.active_states
-    |> Enum.any?(fn configured_state -> normalize_state(configured_state) == normalized_state end)
+    not MapSet.member?(non_runnable_states, normalized_state) and
+      Enum.any?(Config.settings!().tracker.active_states, fn configured_state ->
+        normalize_state(configured_state) == normalized_state
+      end)
   end
 
   defp terminal_task_state?(state_name) do
@@ -481,6 +495,58 @@ defmodule SymphonyElixir.Lark.Adapter do
   end
 
   defp normalize_state(_state_name), do: ""
+
+  defp pick_latest_comment(comments) when is_list(comments) do
+    comments
+    |> Enum.with_index()
+    |> Enum.max_by(&comment_sort_key/1, fn -> nil end)
+    |> case do
+      {comment, _index} -> comment
+      nil -> nil
+    end
+  end
+
+  defp comment_sort_key({comment, index}) when is_map(comment) do
+    {
+      comment_timestamp(comment, ["updated_at", "update_time", "updated_msec", "updated_at_msec"]),
+      comment_timestamp(comment, ["created_at", "create_time", "created_msec", "created_at_msec"]),
+      index
+    }
+  end
+
+  defp comment_timestamp(comment, keys) do
+    Enum.find_value(keys, 0, fn key ->
+      case Map.get(comment, key) do
+        value when is_integer(value) -> value
+        value when is_binary(value) -> parse_sortable_timestamp(value)
+        _ -> nil
+      end
+    end)
+  end
+
+  defp parse_sortable_timestamp(value) when is_binary(value) do
+    cond do
+      String.match?(value, ~r/^\d+$/) ->
+        case Integer.parse(value) do
+          {parsed, ""} -> parsed
+          _ -> 0
+        end
+
+      true ->
+        case DateTime.from_iso8601(value) do
+          {:ok, datetime, _offset} -> DateTime.to_unix(datetime, :millisecond)
+          _ -> 0
+        end
+    end
+  end
+
+  defp non_runnable_task_states do
+    tracker = Config.settings!().tracker
+
+    [tracker.blocked_state, tracker.review_state]
+    |> Enum.map(&normalize_state/1)
+    |> MapSet.new()
+  end
 
   defp state_field_cache_key do
     tracker = Config.settings!().tracker

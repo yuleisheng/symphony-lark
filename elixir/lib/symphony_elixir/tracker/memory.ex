@@ -44,6 +44,13 @@ defmodule SymphonyElixir.Tracker.Memory do
     {:ok, comments}
   end
 
+  @spec latest_comment(String.t()) :: {:ok, map() | nil} | {:error, term()}
+  def latest_comment(issue_id) when is_binary(issue_id) do
+    with {:ok, comments} <- list_comments(issue_id) do
+      {:ok, List.last(comments)}
+    end
+  end
+
   @spec create_comment(String.t(), String.t()) :: :ok | {:error, term()}
   def create_comment(issue_id, body) do
     comments =

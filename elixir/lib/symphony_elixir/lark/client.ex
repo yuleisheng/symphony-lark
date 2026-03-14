@@ -1,6 +1,6 @@
 defmodule SymphonyElixir.Lark.Client do
   @moduledoc """
-  Thin Lark OpenAPI client for task and comment operations.
+  Thin Lark OpenAPI client for task operations, including Task v2 comments.
   """
 
   alias SymphonyElixir.{Config, Lark.Auth}
@@ -80,8 +80,12 @@ defmodule SymphonyElixir.Lark.Client do
   @spec list_comments(String.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def list_comments(task_guid, opts \\ []) when is_binary(task_guid) do
     paginate_collection(
-      "#{task_path(task_guid)}/comments",
-      %{"page_size" => Keyword.get(opts, :page_size, @default_page_size)},
+      task_comments_path(),
+      %{
+        "resource_type" => "task",
+        "resource_id" => task_guid,
+        "page_size" => Keyword.get(opts, :page_size, @default_page_size)
+      },
       opts
     )
   end
@@ -91,8 +95,12 @@ defmodule SymphonyElixir.Lark.Client do
       when is_binary(task_guid) and is_binary(content) do
     request(
       :post,
-      "#{task_path(task_guid)}/comments",
-      Keyword.put(opts, :body, %{"content" => content})
+      task_comments_path(),
+      Keyword.put(opts, :body, %{
+        "content" => content,
+        "resource_type" => "task",
+        "resource_id" => task_guid
+      })
     )
   end
 
@@ -206,7 +214,7 @@ defmodule SymphonyElixir.Lark.Client do
       trimmed == "" ->
         {:error, :missing_lark_path}
 
-      String.starts_with?(trimmed, @task_api_prefix) ->
+      task_api_path?(trimmed) ->
         {:ok, trimmed}
 
       true ->
@@ -219,9 +227,15 @@ defmodule SymphonyElixir.Lark.Client do
   defp normalize_query(query) when is_map(query), do: query
   defp normalize_query(_query), do: %{}
 
+  defp task_api_path?(path) do
+    String.starts_with?(path, @task_api_prefix)
+  end
+
   defp task_path(task_guid) do
     "#{@task_api_prefix}tasks/#{URI.encode(task_guid)}"
   end
+
+  defp task_comments_path, do: "#{@task_api_prefix}comments"
 
   defp tasklist_tasks_path(tasklist_guid) do
     "#{@task_api_prefix}tasklists/#{URI.encode(tasklist_guid)}/tasks"
