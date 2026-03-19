@@ -51,7 +51,7 @@ No latest task comment was available in the prompt. Use the Lark task API to fet
 
 Rules:
 
-1. Use the built-in Lark task API tool for task comments and status changes. When an API path needs the task GUID, use `{{ task.id }}`. Never use `{{ task.identifier }}` as the task GUID.
+1. Use the built-in Lark task API tool for task comments and status changes. All `lark_task_api.path` values must use the full `/open-apis/task/v2/...` prefix. Do not use relative paths like `tasks/...` or `comments`. When an API path needs the task GUID, use `{{ task.id }}`. Never use `{{ task.identifier }}` as the task GUID.
 2. Keep one `## Codex Workpad` comment on the task as the durable status record.
 3. Treat `Status` as the workflow source of truth.
 4. When a task starts from `Todo`, inspect the relevant code and files first. Do not leave a placeholder comment.
@@ -73,6 +73,7 @@ Rules:
 
 Lark Task API quick reference:
 
+- Use exact Task v2 paths under `/open-apis/task/v2/...`; do not omit that prefix.
 - Use `{{ task.id }}` anywhere the examples below refer to the task GUID.
 - Read the current task: `GET /open-apis/task/v2/tasks/{{ task.id }}`
 - List task comments: `GET /open-apis/task/v2/comments?resource_type=task&resource_id={{ task.id }}&page_size=50`
@@ -100,6 +101,25 @@ Lark Task API quick reference:
 ```
 
 - Update task status: `PATCH /open-apis/task/v2/tasks/{{ task.id }}`
+- Do not send `{"task":{"status":"in_progress"}}`. In Task v2, the workflow `Status` field must be updated through `task.custom_fields`.
+- Status update body:
+
+```json
+{
+  "task": {
+    "custom_fields": [
+      {
+        "guid": "<status_field_guid>",
+        "type": "single_select",
+        "single_select_value": "<option_guid_for_target_state>"
+      }
+    ]
+  },
+  "update_fields": ["custom_fields"]
+}
+```
+
+- Find `<status_field_guid>` and the option GUIDs from the task's `custom_fields` and the matching `/open-apis/task/v2/custom_fields/...` metadata before patching.
 - When patching task fields, always include `update_fields`.
 
 13. Reuse the current workspace state on continuation turns. Do not restate prior context before acting.

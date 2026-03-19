@@ -19,6 +19,11 @@ defmodule SymphonyElixir.Config do
   {% else %}
   No description provided.
   {% endif %}
+
+  Lark API rules:
+  - Use full Task v2 paths under /open-apis/task/v2/..., never relative paths like tasks/... or comments.
+  - When a path needs the task GUID, use {{ task.id }}, never {{ task.identifier }}.
+  - Update workflow status through task.custom_fields with update_fields ["custom_fields"], not task.status.
   """
 
   @type codex_runtime_settings :: %{
