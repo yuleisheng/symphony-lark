@@ -137,7 +137,7 @@ hooks:
 Required env:
 
 ```bash
-export SYMPHONY_REPO_ROOT="/Users/yulei/Code/yulei/hyrule"
+export SYMPHONY_REPO_ROOT="/absolute/path/to/your/repo"
 ```
 
 ## Build
@@ -154,12 +154,13 @@ mise exec -- mix build
 
 ```bash
 cd elixir
+command -v codex
 mise exec -- ./bin/symphony \
   --i-understand-that-this-will-be-running-without-the-usual-guardrails \
   ./WORKFLOW.lark.md
 ```
 
-Add `--port 4000` if you want the dashboard.
+Add `--port 4000` if you want the dashboard. `command -v codex` should succeed in the same shell you use to launch Symphony.
 
 ## Task GUID Troubleshooting
 

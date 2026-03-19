@@ -40,6 +40,7 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
    - `mise`
    - `codex`
    - `rsync`
+   - `command -v codex`
    - `gh auth status`
 3. Build Symphony.
 
@@ -52,10 +53,12 @@ mise exec -- mix build
 ```
 
 4. Verify env and auth.
+   - `command -v codex`
    - `codex app-server --help`
    - confirm `LARK_APP_ID`
    - confirm `LARK_APP_SECRET`
    - confirm `SYMPHONY_REPO_ROOT` points at the repo the agents should modify
+   - if `command -v codex` fails in the same shell that will start Symphony, stop and help the user either add Codex to that shell's `PATH` or set a local `codex.command` override; do not hardcode a machine-specific absolute path into the repo default workflow
    - if `gh auth status` fails, stop and tell the user to log in before continuing
    - if `LARK_TASKLIST_GUID` exists, verify the app can list tasks and custom fields for it
    - if the app cannot read the configured tasklist, continue into API-driven Lark setup
@@ -83,12 +86,13 @@ mise exec -- mix build
 ```bash
 cd <target>/elixir
 export SYMPHONY_REPO_ROOT="<repo-path>"
+command -v codex
 mise exec -- ./bin/symphony \
   --i-understand-that-this-will-be-running-without-the-usual-guardrails \
   ./WORKFLOW.lark.md
 ```
 
-Add `--port 4000` if the user wants the dashboard.
+Add `--port 4000` if the user wants the dashboard. Start Symphony from the same shell where `command -v codex` succeeds.
 
 7. Smoke test.
    - confirm the service boots
