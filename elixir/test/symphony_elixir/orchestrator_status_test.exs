@@ -1,6 +1,59 @@
 defmodule SymphonyElixir.OrchestratorStatusTest do
   use SymphonyElixir.TestSupport
 
+  test "running blocked and review issues are allowed to finish their current turn" do
+    running_review_issue = %Issue{
+      id: "issue-review-running",
+      identifier: "MT-301",
+      title: "Review transition test",
+      description: "Ensure review transitions do not kill an active run.",
+      state: "In Progress"
+    }
+
+    running_blocked_issue = %Issue{
+      id: "issue-blocked-running",
+      identifier: "MT-302",
+      title: "Blocked transition test",
+      description: "Ensure blocked transitions do not kill an active run.",
+      state: "In Progress"
+    }
+
+    state = %Orchestrator.State{
+      running: %{
+        running_review_issue.id => %{
+          pid: self(),
+          ref: make_ref(),
+          identifier: running_review_issue.identifier,
+          issue: running_review_issue
+        },
+        running_blocked_issue.id => %{
+          pid: self(),
+          ref: make_ref(),
+          identifier: running_blocked_issue.identifier,
+          issue: running_blocked_issue
+        }
+      },
+      claimed: MapSet.new([running_review_issue.id, running_blocked_issue.id]),
+      completed: MapSet.new(),
+      retry_attempts: %{},
+      codex_totals: %{input_tokens: 0, output_tokens: 0, total_tokens: 0, seconds_running: 0}
+    }
+
+    next_state =
+      Orchestrator.reconcile_issue_states_for_test(
+        [
+          %Issue{running_review_issue | state: "In Review"},
+          %Issue{running_blocked_issue | state: "Blocked"}
+        ],
+        state
+      )
+
+    assert next_state.running[running_review_issue.id].issue.state == "In Review"
+    assert next_state.running[running_blocked_issue.id].issue.state == "Blocked"
+    assert MapSet.member?(next_state.claimed, running_review_issue.id)
+    assert MapSet.member?(next_state.claimed, running_blocked_issue.id)
+  end
+
   test "snapshot returns :timeout when snapshot server is unresponsive" do
     server_name = Module.concat(__MODULE__, :UnresponsiveSnapshotServer)
     parent = self()
@@ -796,8 +849,7 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
 
     send(
       pid,
-      {:DOWN, process_ref, :process, self(),
-       {%RuntimeError{message: "Agent run failed for issue_id=#{issue_id}: :boom"}, []}}
+      {:DOWN, process_ref, :process, self(), {%RuntimeError{message: "Agent run failed for issue_id=#{issue_id}: :boom"}, []}}
     )
 
     state = :sys.get_state(pid)

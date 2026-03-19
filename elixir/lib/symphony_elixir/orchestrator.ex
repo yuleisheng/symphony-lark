@@ -357,14 +357,14 @@ defmodule SymphonyElixir.Orchestrator do
         terminate_running_issue(state, issue.id, true)
 
       blocked_issue_state?(issue.state) ->
-        Logger.info("Issue moved to blocked state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
+        Logger.info("Issue moved to blocked state: #{issue_context(issue)} state=#{issue.state}; allowing the active agent to finish its current turn")
 
-        terminate_running_issue(state, issue.id, false)
+        keep_running_issue_until_exit(state, issue)
 
       review_issue_state?(issue.state) ->
-        Logger.info("Issue moved to review state: #{issue_context(issue)} state=#{issue.state}; stopping active agent")
+        Logger.info("Issue moved to review state: #{issue_context(issue)} state=#{issue.state}; allowing the active agent to finish its current turn")
 
-        terminate_running_issue(state, issue.id, false)
+        keep_running_issue_until_exit(state, issue)
 
       !issue_routable_to_worker?(issue) ->
         Logger.info("Issue no longer routed to this worker: #{issue_context(issue)} assignee=#{inspect(issue.assignee_id)}; stopping active agent")
@@ -426,6 +426,18 @@ defmodule SymphonyElixir.Orchestrator do
         state
     end
   end
+
+  defp keep_running_issue_until_exit(%State{} = state, %Task{id: issue_id} = issue) when is_binary(issue_id) do
+    case Map.get(state.running, issue_id) do
+      %{issue: _} ->
+        refresh_running_issue_state(state, issue)
+
+      _ ->
+        release_issue_claim(state, issue_id)
+    end
+  end
+
+  defp keep_running_issue_until_exit(state, _issue), do: state
 
   defp terminate_running_issue(%State{} = state, issue_id, cleanup_workspace) do
     case Map.get(state.running, issue_id) do
