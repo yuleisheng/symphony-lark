@@ -25,10 +25,9 @@ defmodule SymphonyElixir.Lark.Client do
     with {:ok, normalized_method} <- normalize_method(method),
          {:ok, normalized_path} <- normalize_path(path),
          {:ok, tenant_access_token} <- tenant_access_token_fun.([]),
-         request_spec <- build_request_spec(normalized_method, normalized_path, tenant_access_token, opts),
-         {:ok, response} <- request_fun.(request_spec),
-         {:ok, body} <- normalize_response(response) do
-      {:ok, body}
+         {:ok, response} <-
+           request_fun.(build_request_spec(normalized_method, normalized_path, tenant_access_token, opts)) do
+      normalize_response(response)
     end
   end
 

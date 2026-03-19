@@ -287,49 +287,18 @@ defmodule SymphonyElixir.Lark.Adapter do
 
   defp normalize_state_field(custom_field, fallback_field_name) do
     field_type = normalize_field_type(custom_field["type"] || custom_field[:type])
-    field_guid = custom_field["guid"] || custom_field[:guid]
 
-    cond do
-      field_type != :single_select ->
-        {:error, {:invalid_lark_state_field_type, field_type}}
+    with :ok <- validate_state_field_type(field_type),
+         {:ok, field_guid} <- validate_state_field_guid(custom_field["guid"] || custom_field[:guid], custom_field) do
+      {option_guid_by_state, option_state_by_guid} = build_state_option_maps(custom_field)
 
-      not is_binary(field_guid) or field_guid == "" ->
-        {:error, {:invalid_lark_state_field_guid, custom_field}}
-
-      true ->
-        options =
-          custom_field["single_select_setting"] ||
-            custom_field[:single_select_setting] ||
-            custom_field["select_setting"] ||
-            custom_field[:select_setting] ||
-            %{}
-
-        option_entries = Map.get(options, "options") || Map.get(options, :options) || []
-
-        {option_guid_by_state, option_state_by_guid} =
-          Enum.reduce(option_entries, {%{}, %{}}, fn option, {guid_by_state, state_by_guid} ->
-            option_name = option["name"] || option[:name]
-            option_guid = option["guid"] || option[:guid]
-
-            if is_binary(option_name) and option_name != "" and is_binary(option_guid) and option_guid != "" do
-              normalized_state = normalize_state(option_name)
-
-              {
-                Map.put(guid_by_state, normalized_state, option_guid),
-                Map.put(state_by_guid, option_guid, option_name)
-              }
-            else
-              {guid_by_state, state_by_guid}
-            end
-          end)
-
-        {:ok,
-         %{
-           field_guid: field_guid,
-           field_name: custom_field["name"] || custom_field[:name] || fallback_field_name,
-           option_guid_by_state: option_guid_by_state,
-           option_state_by_guid: option_state_by_guid
-         }}
+      {:ok,
+       %{
+         field_guid: field_guid,
+         field_name: custom_field["name"] || custom_field[:name] || fallback_field_name,
+         option_guid_by_state: option_guid_by_state,
+         option_state_by_guid: option_state_by_guid
+       }}
     end
   end
 
@@ -356,43 +325,12 @@ defmodule SymphonyElixir.Lark.Adapter do
   end
 
   defp state_name_for_task(task, %{field_guid: field_guid, option_state_by_guid: option_state_by_guid}) do
-    custom_fields = task["custom_fields"] || task[:custom_fields] || []
-
-    custom_fields
-    |> Enum.find(fn custom_field ->
-      (custom_field["guid"] || custom_field[:guid]) == field_guid
-    end)
+    task
+    |> task_custom_fields()
+    |> Enum.find(&state_field_guid?(&1, field_guid))
     |> case do
-      nil ->
-        nil
-
-      custom_field ->
-        cond do
-          is_binary(custom_field["display_value"]) and custom_field["display_value"] != "" ->
-            custom_field["display_value"]
-
-          is_binary(custom_field[:display_value]) and custom_field[:display_value] != "" ->
-            custom_field[:display_value]
-
-          is_binary(custom_field["single_select_value"]) ->
-            Map.get(option_state_by_guid, custom_field["single_select_value"], custom_field["single_select_value"])
-
-          is_binary(custom_field[:single_select_value]) ->
-            Map.get(option_state_by_guid, custom_field[:single_select_value], custom_field[:single_select_value])
-
-          is_binary(custom_field["text_value"]) and custom_field["text_value"] != "" ->
-            custom_field["text_value"]
-
-          is_binary(custom_field[:text_value]) and custom_field[:text_value] != "" ->
-            custom_field[:text_value]
-
-          is_map(custom_field["value"]) and is_binary(custom_field["value"]["option_guid"]) ->
-            option_guid = custom_field["value"]["option_guid"]
-            Map.get(option_state_by_guid, option_guid, option_guid)
-
-          true ->
-            nil
-        end
+      nil -> nil
+      custom_field -> state_name_from_custom_field(custom_field, option_state_by_guid)
     end
   end
 
@@ -488,6 +426,100 @@ defmodule SymphonyElixir.Lark.Adapter do
   defp normalize_field_type("select"), do: :single_select
   defp normalize_field_type(other), do: other
 
+  defp validate_state_field_type(:single_select), do: :ok
+  defp validate_state_field_type(field_type), do: {:error, {:invalid_lark_state_field_type, field_type}}
+
+  defp validate_state_field_guid(field_guid, _custom_field) when is_binary(field_guid) and field_guid != "",
+    do: {:ok, field_guid}
+
+  defp validate_state_field_guid(_field_guid, custom_field),
+    do: {:error, {:invalid_lark_state_field_guid, custom_field}}
+
+  defp build_state_option_maps(custom_field) do
+    custom_field
+    |> state_field_option_entries()
+    |> Enum.reduce({%{}, %{}}, &merge_state_option/2)
+  end
+
+  defp state_field_option_entries(custom_field) do
+    options =
+      custom_field["single_select_setting"] ||
+        custom_field[:single_select_setting] ||
+        custom_field["select_setting"] ||
+        custom_field[:select_setting] ||
+        %{}
+
+    Map.get(options, "options") || Map.get(options, :options) || []
+  end
+
+  defp merge_state_option(option, {guid_by_state, state_by_guid}) do
+    case normalize_state_option(option) do
+      {:ok, normalized_state, option_guid, option_name} ->
+        {
+          Map.put(guid_by_state, normalized_state, option_guid),
+          Map.put(state_by_guid, option_guid, option_name)
+        }
+
+      :error ->
+        {guid_by_state, state_by_guid}
+    end
+  end
+
+  defp normalize_state_option(option) do
+    option_name = option["name"] || option[:name]
+    option_guid = option["guid"] || option[:guid]
+
+    if is_binary(option_name) and option_name != "" and is_binary(option_guid) and option_guid != "" do
+      {:ok, normalize_state(option_name), option_guid, option_name}
+    else
+      :error
+    end
+  end
+
+  defp task_custom_fields(task) when is_map(task) do
+    task["custom_fields"] || task[:custom_fields] || []
+  end
+
+  defp state_field_guid?(custom_field, field_guid) do
+    (custom_field["guid"] || custom_field[:guid]) == field_guid
+  end
+
+  defp state_name_from_custom_field(custom_field, option_state_by_guid) do
+    display_state_name(custom_field) ||
+      single_select_state_name(custom_field, option_state_by_guid) ||
+      text_state_name(custom_field) ||
+      nested_option_state_name(custom_field, option_state_by_guid)
+  end
+
+  defp display_state_name(custom_field) do
+    present_string(custom_field["display_value"]) || present_string(custom_field[:display_value])
+  end
+
+  defp single_select_state_name(custom_field, option_state_by_guid) do
+    option_state_name(custom_field["single_select_value"], option_state_by_guid) ||
+      option_state_name(custom_field[:single_select_value], option_state_by_guid)
+  end
+
+  defp text_state_name(custom_field) do
+    present_string(custom_field["text_value"]) || present_string(custom_field[:text_value])
+  end
+
+  defp nested_option_state_name(custom_field, option_state_by_guid) do
+    case custom_field["value"] do
+      %{"option_guid" => option_guid} -> option_state_name(option_guid, option_state_by_guid)
+      _ -> nil
+    end
+  end
+
+  defp option_state_name(option_guid, option_state_by_guid) when is_binary(option_guid) do
+    Map.get(option_state_by_guid, option_guid, option_guid)
+  end
+
+  defp option_state_name(_option_guid, _option_state_by_guid), do: nil
+
+  defp present_string(value) when is_binary(value) and value != "", do: value
+  defp present_string(_value), do: nil
+
   defp normalize_state(state_name) when is_binary(state_name) do
     state_name
     |> String.trim()
@@ -525,18 +557,24 @@ defmodule SymphonyElixir.Lark.Adapter do
   end
 
   defp parse_sortable_timestamp(value) when is_binary(value) do
-    cond do
-      String.match?(value, ~r/^\d+$/) ->
-        case Integer.parse(value) do
-          {parsed, ""} -> parsed
-          _ -> 0
-        end
+    if String.match?(value, ~r/^\d+$/) do
+      parse_numeric_timestamp(value)
+    else
+      parse_iso8601_timestamp(value)
+    end
+  end
 
-      true ->
-        case DateTime.from_iso8601(value) do
-          {:ok, datetime, _offset} -> DateTime.to_unix(datetime, :millisecond)
-          _ -> 0
-        end
+  defp parse_numeric_timestamp(value) do
+    case Integer.parse(value) do
+      {parsed, ""} -> parsed
+      _ -> 0
+    end
+  end
+
+  defp parse_iso8601_timestamp(value) do
+    case DateTime.from_iso8601(value) do
+      {:ok, datetime, _offset} -> DateTime.to_unix(datetime, :millisecond)
+      _ -> 0
     end
   end
 

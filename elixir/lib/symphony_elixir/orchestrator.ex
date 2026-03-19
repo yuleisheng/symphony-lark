@@ -950,25 +950,28 @@ defmodule SymphonyElixir.Orchestrator do
   defp run_terminal_workspace_cleanup do
     case Config.validate!() do
       :ok ->
-        case Tracker.fetch_issues_by_states(Config.settings!().tracker.terminal_states) do
-          {:ok, issues} ->
-            issues
-            |> Enum.each(fn
-              %Task{identifier: identifier} when is_binary(identifier) ->
-                cleanup_issue_workspace(identifier)
-
-              _ ->
-                :ok
-            end)
-
-          {:error, reason} ->
-            Logger.warning("Skipping startup terminal workspace cleanup; failed to fetch terminal tasks: #{inspect(reason)}")
-        end
+        cleanup_terminal_issue_workspaces()
 
       {:error, reason} ->
         Logger.warning("Skipping startup terminal workspace cleanup; workflow config is incomplete: #{inspect(reason)}")
     end
   end
+
+  defp cleanup_terminal_issue_workspaces do
+    case Tracker.fetch_issues_by_states(Config.settings!().tracker.terminal_states) do
+      {:ok, issues} ->
+        Enum.each(issues, &cleanup_terminal_issue_workspace/1)
+
+      {:error, reason} ->
+        Logger.warning("Skipping startup terminal workspace cleanup; failed to fetch terminal tasks: #{inspect(reason)}")
+    end
+  end
+
+  defp cleanup_terminal_issue_workspace(%Task{identifier: identifier}) when is_binary(identifier) do
+    cleanup_issue_workspace(identifier)
+  end
+
+  defp cleanup_terminal_issue_workspace(_issue), do: :ok
 
   defp notify_dashboard do
     StatusDashboard.notify_update()
