@@ -165,7 +165,7 @@ Add `--port 4000` if you want the dashboard. `command -v codex` should succeed i
 
 ## Task GUID Troubleshooting
 
-Most users should not need raw task GUIDs outside debugging. If you do need one:
+Most users should not need raw task GUIDs outside debugging because the default workflow prompt now includes the task GUID directly. If you do need to look one up manually:
 
 1. List tasks in the configured tasklist with the Task v2 API.
 2. Inspect the `guid` of the task you want.

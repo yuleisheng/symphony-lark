@@ -268,4 +268,106 @@ defmodule SymphonyElixir.AgentRunnerTest do
       File.rm_rf(test_root)
     end
   end
+
+  test "agent runner starts a fresh Codex session for continuation turns" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-fresh-session-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      codex_binary = Path.join(test_root, "fake-codex")
+      invocation_log = Path.join(test_root, "invocations.log")
+      input_log = Path.join(test_root, "input.log")
+
+      File.mkdir_p!(workspace_root)
+      File.write!(invocation_log, "")
+      File.write!(input_log, "")
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      invocation_log="#{invocation_log}"
+      input_log="#{input_log}"
+
+      printf '%s\\n' "$$" >> "$invocation_log"
+
+      count=0
+      while IFS= read -r line; do
+        printf '%s\\n' "$line" >> "$input_log"
+        count=$((count + 1))
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-fresh-session"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-fresh-session"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server",
+        prompt: """
+        Identifier: {{ task.identifier }}
+        Task GUID: {{ task.id }}
+        Title: {{ task.title }}
+        """,
+        max_turns: 3
+      )
+
+      issue = %Issue{
+        id: "issue-fresh-session",
+        identifier: "LT-FRESH",
+        title: "Use a fresh session for continuations",
+        description: "Make each continuation turn start cleanly.",
+        state: "In Progress"
+      }
+
+      refresh_counter = :atomics.new(1, [])
+
+      issue_state_fetcher = fn [_issue_id] ->
+        case :atomics.add_get(refresh_counter, 1, 1) do
+          1 ->
+            {:ok, [%Issue{issue | state: "In Progress"}]}
+
+          _ ->
+            {:ok, []}
+        end
+      end
+
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 issue_state_fetcher: issue_state_fetcher,
+                 max_turns: 3
+               )
+
+      assert invocation_log
+             |> File.read!()
+             |> String.split("\n", trim: true)
+             |> length() == 2
+
+      prompt_payload = File.read!(input_log)
+      assert prompt_payload =~ "Task GUID"
+      assert prompt_payload =~ "Continuation guidance:"
+      assert prompt_payload =~ "fresh Codex thread"
+    after
+      File.rm_rf(test_root)
+    end
+  end
 end

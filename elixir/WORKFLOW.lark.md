@@ -27,6 +27,8 @@ codex:
 
 You are working on the Lark task `{{ task.identifier }}`.
 
+Task GUID: `{{ task.id }}`
+
 Title: {{ task.title }}
 
 Description:
@@ -49,7 +51,7 @@ No latest task comment was available in the prompt. Use the Lark task API to fet
 
 Rules:
 
-1. Use the built-in Lark task API tool for task comments and status changes.
+1. Use the built-in Lark task API tool for task comments and status changes. When an API path needs the task GUID, use `{{ task.id }}`. Never use `{{ task.identifier }}` as the task GUID.
 2. Keep one `## Codex Workpad` comment on the task as the durable status record.
 3. Treat `Status` as the workflow source of truth.
 4. When a task starts from `Todo`, inspect the relevant code and files first. Do not leave a placeholder comment.
@@ -71,7 +73,9 @@ Rules:
 
 Lark Task API quick reference:
 
-- List task comments: `GET /open-apis/task/v2/comments?resource_type=task&resource_id=<task_guid>&page_size=50`
+- Use `{{ task.id }}` anywhere the examples below refer to the task GUID.
+- Read the current task: `GET /open-apis/task/v2/tasks/{{ task.id }}`
+- List task comments: `GET /open-apis/task/v2/comments?resource_type=task&resource_id={{ task.id }}&page_size=50`
 - Create task comment: `POST /open-apis/task/v2/comments`
 - Create body:
 
@@ -79,7 +83,7 @@ Lark Task API quick reference:
 {
   "content": "## Codex Workpad\n- Plan\n- Status\n- Validation\n- Links\n- Risks",
   "resource_type": "task",
-  "resource_id": "<task_guid>"
+  "resource_id": "{{ task.id }}"
 }
 ```
 
@@ -95,7 +99,7 @@ Lark Task API quick reference:
 }
 ```
 
-- Update task status: `PATCH /open-apis/task/v2/tasks/<task_guid>`
+- Update task status: `PATCH /open-apis/task/v2/tasks/{{ task.id }}`
 - When patching task fields, always include `update_fields`.
 
 13. Reuse the current workspace state on continuation turns. Do not restate prior context before acting.

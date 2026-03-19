@@ -10,6 +10,7 @@ defmodule SymphonyElixir.Config do
   You are working on a Lark task.
 
   Identifier: {{ task.identifier }}
+  Task GUID: {{ task.id }}
   Title: {{ task.title }}
 
   Body:

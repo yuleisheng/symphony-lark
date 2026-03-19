@@ -146,6 +146,7 @@ defmodule SymphonyElixir.LarkConfigTest do
 
     assert prompt =~ "You are working on a Lark task."
     assert prompt =~ "LT-12345678"
+    assert prompt =~ "Task GUID: task-123"
     assert prompt =~ "Use the Lark prompt template"
   end
 end
