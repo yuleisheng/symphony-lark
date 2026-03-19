@@ -17,7 +17,7 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - Get a local `symphony-lark` checkout built and runnable.
 - Verify the required CLIs and auth.
 - Prefer app-driven Lark bootstrap when tasklist access is missing.
-- Ensure the default workflow can materialize the real repo into each task workspace.
+- Ensure the default workflow can materialize the real repo into each task workspace with a pushable upstream remote.
 - Start Symphony with `elixir/WORKFLOW.lark.md`.
 
 ## Required Inputs
@@ -58,8 +58,10 @@ mise exec -- mix build
    - confirm `LARK_APP_ID`
    - confirm `LARK_APP_SECRET`
    - confirm `SYMPHONY_REPO_ROOT` points at the repo the agents should modify
+   - confirm `git -C "$SYMPHONY_REPO_ROOT" remote get-url origin` points at the GitHub repo agents should push PRs to
    - if `command -v codex` fails in the same shell that will start Symphony, stop and help the user either add Codex to that shell's `PATH` or set a local `codex.command` override; do not hardcode a machine-specific absolute path into the repo default workflow
    - if `gh auth status` fails, stop and tell the user to log in before continuing
+   - if the source repo `origin` is missing or still points at a local filesystem path, stop and fix that remote before continuing because task workspaces inherit it for PR publication
    - if `LARK_TASKLIST_GUID` exists, verify the app can list tasks and custom fields for it
    - if the app cannot read the configured tasklist, continue into API-driven Lark setup
 5. Guided Lark setup when needed.
@@ -101,6 +103,7 @@ Add `--port 4000` if the user wants the dashboard. Start Symphony from the same 
    - confirm the `Status` field is visible to the app
    - confirm the `Status` field options exactly match `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, `Done`
    - confirm `gh` can reach GitHub so code-change tasks can publish PRs
+   - confirm `git -C "$SYMPHONY_REPO_ROOT" remote get-url origin` is a pushable GitHub remote so new task workspaces inherit the right `origin`
 
 ## API Paths
 
@@ -113,7 +116,7 @@ Add `--port 4000` if the user wants the dashboard. Start Symphony from the same 
 
 - Prefer temporary `export` commands unless the user explicitly asks to modify shell startup files.
 - `open.larksuite.com` and `open.feishu.cn` may both work in some tenants; keep the workflow endpoint aligned with the base that actually passes the tasklist probes.
-- The default workflow expects `SYMPHONY_REPO_ROOT` so each task workspace contains a real repo checkout instead of an empty temp directory.
+- The default workflow expects `SYMPHONY_REPO_ROOT` so each task workspace contains a real repo checkout instead of an empty temp directory, and it inherits the source repo's `origin` remote for PR publication when one exists.
 - The supported workflow states are `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, and `Done`.
 - The lowest-friction path is to let the skill create the tasklist and `Status` field instead of asking the user to find an existing tasklist GUID by hand.
 - If blocked, report the exact missing tool, env var, permission, or tasklist/status setup item.

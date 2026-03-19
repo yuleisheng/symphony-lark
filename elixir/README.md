@@ -106,6 +106,7 @@ Notes:
 - `tracker.tasklist_guid` falls back to `LARK_TASKLIST_GUID`.
 - `workspace.root` has an internal default. You only need to override it if you want task workspaces somewhere specific.
 - `SYMPHONY_REPO_ROOT` is required by the default `hooks.after_create` so each task workspace contains a real repo checkout.
+- The default `hooks.after_create` preserves the source repo's `origin` fetch/push URLs when they exist, so `SYMPHONY_REPO_ROOT` should point at a clone whose `origin` already targets the GitHub repo agents should publish to.
 - The default workflow polls every 5 seconds unless `polling.interval_ms` is overridden.
 - For local runs, simple `codex.command` values like `codex app-server` are resolved from the Symphony process `PATH`. If your Codex install lives outside `PATH`, either start Symphony with the right `PATH` or set `codex.command` to an absolute path.
 - Moving a task into a terminal state also sets `completed_at` when `complete_terminal_tasks` is `true`.
@@ -125,13 +126,13 @@ Symphony treats the tasklist-scoped `Status` custom field as the workflow source
 
 ### Real Repo Workspaces
 
-`workspace.root` is the parent directory for per-task workspaces, not the repo checkout itself. The default workflow uses Symphony's built-in workspace root and materializes your repo into each fresh task workspace with `hooks.after_create`, so the only required extra env var is `SYMPHONY_REPO_ROOT`.
+`workspace.root` is the parent directory for per-task workspaces, not the repo checkout itself. The default workflow uses Symphony's built-in workspace root and materializes your repo into each fresh task workspace with `hooks.after_create`, preserving the source repo's `origin` remote when available, so the only required extra env var is `SYMPHONY_REPO_ROOT`.
 
 Example:
 
 ```yaml
 hooks:
-  after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; command -v rsync >/dev/null || { echo \"rsync is required\"; exit 1; }; git clone --local \"$SYMPHONY_REPO_ROOT\" . && rsync -a --delete --exclude '.git' \"$SYMPHONY_REPO_ROOT\"/ ./"
+  after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; command -v rsync >/dev/null || { echo \"rsync is required\"; exit 1; }; source_origin=\"$(git -C \"$SYMPHONY_REPO_ROOT\" remote get-url origin 2>/dev/null || true)\"; source_origin_push=\"$(git -C \"$SYMPHONY_REPO_ROOT\" remote get-url --push origin 2>/dev/null || true)\"; git clone --local \"$SYMPHONY_REPO_ROOT\" . && if [ -n \"$source_origin\" ]; then git remote set-url origin \"$source_origin\"; fi && if [ -n \"$source_origin_push\" ]; then git remote set-url --push origin \"$source_origin_push\"; fi && rsync -a --delete --exclude '.git' \"$SYMPHONY_REPO_ROOT\"/ ./"
 ```
 
 Required env:

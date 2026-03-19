@@ -56,7 +56,8 @@ defmodule SymphonyElixir.LarkConfigTest do
 
     write_workflow_file!(Workflow.workflow_file_path(),
       workspace_root: Path.join(System.tmp_dir!(), "symphony_workspaces"),
-      hook_after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; git clone --local \"$SYMPHONY_REPO_ROOT\" ."
+      hook_after_create:
+        "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; source_origin=\"$(git -C \"$SYMPHONY_REPO_ROOT\" remote get-url origin 2>/dev/null || true)\"; git clone --local \"$SYMPHONY_REPO_ROOT\" . && if [ -n \"$source_origin\" ]; then git remote set-url origin \"$source_origin\"; fi"
     )
 
     assert {:error, :missing_symphony_repo_root} = Config.validate!()

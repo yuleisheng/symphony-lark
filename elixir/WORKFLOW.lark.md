@@ -17,7 +17,7 @@ tracker:
 polling:
   interval_ms: 5000
 hooks:
-  after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; command -v rsync >/dev/null || { echo \"rsync is required\"; exit 1; }; git clone --local \"$SYMPHONY_REPO_ROOT\" . && rsync -a --delete --exclude '.git' \"$SYMPHONY_REPO_ROOT\"/ ./"
+  after_create: "test -n \"$SYMPHONY_REPO_ROOT\" || { echo \"SYMPHONY_REPO_ROOT is required\"; exit 1; }; command -v rsync >/dev/null || { echo \"rsync is required\"; exit 1; }; source_origin=\"$(git -C \"$SYMPHONY_REPO_ROOT\" remote get-url origin 2>/dev/null || true)\"; source_origin_push=\"$(git -C \"$SYMPHONY_REPO_ROOT\" remote get-url --push origin 2>/dev/null || true)\"; git clone --local \"$SYMPHONY_REPO_ROOT\" . && if [ -n \"$source_origin\" ]; then git remote set-url origin \"$source_origin\"; fi && if [ -n \"$source_origin_push\" ]; then git remote set-url --push origin \"$source_origin_push\"; fi && rsync -a --delete --exclude '.git' \"$SYMPHONY_REPO_ROOT\"/ ./"
 agent:
   max_concurrent_agents: 10
   max_turns: 20
