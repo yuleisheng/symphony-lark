@@ -76,6 +76,48 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
+  test "app server returns a clear error when the local codex command is unavailable" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-missing-codex-#{System.unique_integer([:positive])}"
+      )
+
+    previous_path = System.get_env("PATH")
+
+    on_exit(fn ->
+      restore_env("PATH", previous_path)
+    end)
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-1000")
+
+      File.mkdir_p!(workspace)
+      System.put_env("PATH", "/bin")
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "codex app-server"
+      )
+
+      issue = %Issue{
+        id: "issue-missing-codex",
+        identifier: "MT-1000",
+        title: "Missing codex",
+        description: "Ensure local startup fails clearly when codex is unavailable",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-1000",
+        labels: ["backend"]
+      }
+
+      assert {:error, {:codex_command_not_found, "codex", "codex app-server"}} =
+               AppServer.run(workspace, "Validate missing codex error", issue)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server passes explicit turn sandbox policies through unchanged" do
     test_root =
       Path.join(

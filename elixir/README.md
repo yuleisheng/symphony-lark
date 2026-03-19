@@ -107,6 +107,7 @@ Notes:
 - `workspace.root` has an internal default. You only need to override it if you want task workspaces somewhere specific.
 - `SYMPHONY_REPO_ROOT` is required by the default `hooks.after_create` so each task workspace contains a real repo checkout.
 - The default workflow polls every 5 seconds unless `polling.interval_ms` is overridden.
+- For local runs, simple `codex.command` values like `codex app-server` are resolved from the Symphony process `PATH`. If your Codex install lives outside `PATH`, either start Symphony with the right `PATH` or set `codex.command` to an absolute path.
 - Moving a task into a terminal state also sets `completed_at` when `complete_terminal_tasks` is `true`.
 - The workflow prompt should use `task.*` variables. `issue.*` is still available as a compatibility alias, but new workflows should use `task`.
 - The intended workflow states are `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, and `Done`.

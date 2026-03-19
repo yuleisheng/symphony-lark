@@ -2,6 +2,20 @@ defmodule SymphonyElixir.LarkConfigTest do
   use SymphonyElixir.TestSupport
 
   test "config validates required Lark tracker fields" do
+    previous_app_id = System.get_env("LARK_APP_ID")
+    previous_app_secret = System.get_env("LARK_APP_SECRET")
+    previous_tasklist_guid = System.get_env("LARK_TASKLIST_GUID")
+
+    on_exit(fn ->
+      restore_env("LARK_APP_ID", previous_app_id)
+      restore_env("LARK_APP_SECRET", previous_app_secret)
+      restore_env("LARK_TASKLIST_GUID", previous_tasklist_guid)
+    end)
+
+    System.delete_env("LARK_APP_ID")
+    System.delete_env("LARK_APP_SECRET")
+    System.delete_env("LARK_TASKLIST_GUID")
+
     write_workflow_file!(Workflow.workflow_file_path(), tracker_app_id: nil)
     assert {:error, :missing_lark_app_id} = Config.validate!()
 
@@ -49,6 +63,36 @@ defmodule SymphonyElixir.LarkConfigTest do
 
     System.put_env("SYMPHONY_REPO_ROOT", "")
     assert {:error, :missing_symphony_repo_root} = Config.validate!()
+  end
+
+  test "config validates that the local codex command is available on PATH" do
+    previous_path = System.get_env("PATH")
+
+    on_exit(fn ->
+      restore_env("PATH", previous_path)
+    end)
+
+    System.put_env("PATH", "/bin")
+    write_workflow_file!(Workflow.workflow_file_path(), codex_command: "codex app-server")
+
+    assert {:error, {:codex_command_not_found, "codex", "codex app-server"}} = Config.validate!()
+  end
+
+  test "config does not require a local codex binary when only remote worker hosts are configured" do
+    previous_path = System.get_env("PATH")
+
+    on_exit(fn ->
+      restore_env("PATH", previous_path)
+    end)
+
+    System.put_env("PATH", "/bin")
+
+    write_workflow_file!(Workflow.workflow_file_path(),
+      codex_command: "codex app-server",
+      worker_ssh_hosts: ["builder@example.com"]
+    )
+
+    assert :ok = Config.validate!()
   end
 
   test "Lark secrets resolve from environment variables" do

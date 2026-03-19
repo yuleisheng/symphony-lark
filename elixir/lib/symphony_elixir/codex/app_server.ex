@@ -4,7 +4,7 @@ defmodule SymphonyElixir.Codex.AppServer do
   """
 
   require Logger
-  alias SymphonyElixir.{Codex.DynamicTool, Config, PathSafety, SSH}
+  alias SymphonyElixir.{Codex.Command, Codex.DynamicTool, Config, PathSafety, SSH}
 
   @initialize_id 1
   @thread_start_id 2
@@ -187,25 +187,29 @@ defmodule SymphonyElixir.Codex.AppServer do
   end
 
   defp start_port(workspace, nil) do
-    executable = System.find_executable("bash")
+    command = Config.settings!().codex.command
 
-    if is_nil(executable) do
-      {:error, :bash_not_found}
-    else
-      port =
-        Port.open(
-          {:spawn_executable, String.to_charlist(executable)},
-          [
-            :binary,
-            :exit_status,
-            :stderr_to_stdout,
-            args: [~c"-lc", String.to_charlist(Config.settings!().codex.command)],
-            cd: String.to_charlist(workspace),
-            line: @port_line_bytes
-          ]
-        )
+    with :ok <- Command.validate_local(command) do
+      executable = System.find_executable("bash")
 
-      {:ok, port}
+      if is_nil(executable) do
+        {:error, :bash_not_found}
+      else
+        port =
+          Port.open(
+            {:spawn_executable, String.to_charlist(executable)},
+            [
+              :binary,
+              :exit_status,
+              :stderr_to_stdout,
+              args: [~c"-lc", String.to_charlist(command)],
+              cd: String.to_charlist(workspace),
+              line: @port_line_bytes
+            ]
+          )
+
+        {:ok, port}
+      end
     end
   end
 

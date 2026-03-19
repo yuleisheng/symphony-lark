@@ -144,13 +144,15 @@ defmodule SymphonyElixir.Orchestrator do
               })
 
             _ ->
-              Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{inspect(reason)}; scheduling retry")
+              formatted_reason = format_exit_reason(reason)
+
+              Logger.warning("Agent task exited for issue_id=#{issue_id} session_id=#{session_id} reason=#{formatted_reason} raw_reason=#{inspect(reason)}; scheduling retry")
 
               next_attempt = next_retry_attempt_from_running(running_entry)
 
               schedule_issue_retry(state, issue_id, next_attempt, %{
                 identifier: running_entry.identifier,
-                error: "agent exited: #{inspect(reason)}",
+                error: "agent exited: #{formatted_reason}",
                 worker_host: Map.get(running_entry, :worker_host),
                 workspace_path: Map.get(running_entry, :workspace_path)
               })
@@ -244,6 +246,10 @@ defmodule SymphonyElixir.Orchestrator do
 
       {:error, :missing_lark_state_field_name} ->
         Logger.error("Lark state field name missing in WORKFLOW.lark.md")
+        state
+
+      {:error, {:codex_command_not_found, executable, command}} ->
+        Logger.error(Config.format_validation_error({:codex_command_not_found, executable, command}))
         state
 
       {:error, {:invalid_workflow_config, message}} ->
@@ -937,6 +943,24 @@ defmodule SymphonyElixir.Orchestrator do
   defp handle_retry_issue_lookup(nil, state, issue_id, _attempt, _metadata) do
     Logger.debug("Issue no longer visible, removing claim issue_id=#{issue_id}")
     {:noreply, release_issue_claim(state, issue_id)}
+  end
+
+  defp format_exit_reason({:shutdown, reason}), do: format_exit_reason(reason)
+
+  defp format_exit_reason({reason, stacktrace}) when is_list(stacktrace) do
+    if is_exception(reason) do
+      Exception.message(reason)
+    else
+      inspect({reason, stacktrace})
+    end
+  end
+
+  defp format_exit_reason(reason) do
+    if is_exception(reason) do
+      Exception.message(reason)
+    else
+      inspect(reason)
+    end
   end
 
   defp cleanup_issue_workspace(identifier, worker_host \\ nil)

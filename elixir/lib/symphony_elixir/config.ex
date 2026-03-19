@@ -3,7 +3,7 @@ defmodule SymphonyElixir.Config do
   Runtime configuration loaded from `WORKFLOW.md`.
   """
 
-  alias SymphonyElixir.Config.Schema
+  alias SymphonyElixir.{Codex.Command, Config.Schema}
   alias SymphonyElixir.Workflow
 
   @default_prompt_template """
@@ -120,6 +120,9 @@ defmodule SymphonyElixir.Config do
       :missing_symphony_repo_root ->
         "Repository root missing. Export `SYMPHONY_REPO_ROOT` for the default repo materialization hook."
 
+      {:codex_command_not_found, executable, command} ->
+        Command.format_not_found_error(executable, command)
+
       other ->
         format_config_error(other)
     end
@@ -162,7 +165,21 @@ defmodule SymphonyElixir.Config do
         {:error, :missing_symphony_repo_root}
 
       true ->
-        :ok
+        validate_local_codex_command(settings)
+    end
+  end
+
+  defp validate_local_codex_command(%{worker: %{ssh_hosts: ssh_hosts}, codex: %{command: command}}) do
+    ssh_hosts =
+      ssh_hosts
+      |> List.wrap()
+      |> Enum.map(&String.trim/1)
+      |> Enum.reject(&(&1 == ""))
+
+    if ssh_hosts == [] do
+      Command.validate_local(command)
+    else
+      :ok
     end
   end
 

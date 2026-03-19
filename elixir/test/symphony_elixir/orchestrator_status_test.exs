@@ -751,6 +751,63 @@ defmodule SymphonyElixir.OrchestratorStatusTest do
     assert due_in_ms > 0
   end
 
+  test "orchestrator formats crashing worker exceptions in retry backoff entries" do
+    issue_id = "issue-runtime-error"
+
+    issue = %Issue{
+      id: issue_id,
+      identifier: "LT-5B31C5FD",
+      title: "Runtime error formatting",
+      description: "Ensure retry entries show the exception message instead of the raw struct.",
+      state: "In Progress",
+      url: "https://example.org/issues/LT-5B31C5FD"
+    }
+
+    orchestrator_name = Module.concat(__MODULE__, :RuntimeErrorRetryOrchestrator)
+    {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        Process.exit(pid, :normal)
+      end
+    end)
+
+    initial_state = :sys.get_state(pid)
+    process_ref = make_ref()
+
+    running_entry = %{
+      pid: self(),
+      ref: process_ref,
+      identifier: issue.identifier,
+      issue: issue,
+      session_id: "thread-runtime-turn-runtime",
+      turn_count: 1,
+      last_codex_message: nil,
+      last_codex_timestamp: nil,
+      last_codex_event: nil,
+      started_at: DateTime.utc_now()
+    }
+
+    :sys.replace_state(pid, fn _ ->
+      initial_state
+      |> Map.put(:running, %{issue_id => running_entry})
+      |> Map.put(:claimed, MapSet.put(initial_state.claimed, issue_id))
+    end)
+
+    send(
+      pid,
+      {:DOWN, process_ref, :process, self(),
+       {%RuntimeError{message: "Agent run failed for issue_id=#{issue_id}: :boom"}, []}}
+    )
+
+    state = :sys.get_state(pid)
+
+    assert %{attempt: 1, identifier: "LT-5B31C5FD"} = state.retry_attempts[issue_id]
+
+    assert state.retry_attempts[issue_id].error ==
+             "agent exited: Agent run failed for issue_id=#{issue_id}: :boom"
+  end
+
   test "orchestrator snapshot includes poll countdown and checking status" do
     orchestrator_name = Module.concat(__MODULE__, :PollingSnapshotOrchestrator)
     {:ok, pid} = Orchestrator.start_link(name: orchestrator_name)
