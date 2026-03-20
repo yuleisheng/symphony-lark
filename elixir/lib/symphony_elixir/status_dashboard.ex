@@ -340,6 +340,7 @@ defmodule SymphonyElixir.StatusDashboard do
         codex_output_tokens = Map.get(codex_totals, :output_tokens, 0)
         codex_total_tokens = Map.get(codex_totals, :total_tokens, 0)
         codex_seconds_running = Map.get(codex_totals, :seconds_running, 0)
+        total_runtime_seconds = total_runtime_seconds(codex_seconds_running, running)
         agent_count = length(running)
         max_agents = Config.settings!().agent.max_concurrent_agents
         running_event_width = running_event_width(terminal_columns_override)
@@ -355,7 +356,7 @@ defmodule SymphonyElixir.StatusDashboard do
              colorize("#{max_agents}", @ansi_gray),
            colorize("│ Throughput: ", @ansi_bold) <> colorize("#{format_tps(tps)} tps", @ansi_cyan),
            colorize("│ Runtime: ", @ansi_bold) <>
-             colorize(format_runtime_seconds(codex_seconds_running), @ansi_magenta),
+             colorize(format_runtime_seconds(total_runtime_seconds), @ansi_magenta),
            colorize("│ Tokens: ", @ansi_bold) <>
              colorize("in #{format_count(codex_input_tokens)}", @ansi_yellow) <>
              colorize(" | ", @ansi_gray) <>
@@ -720,6 +721,26 @@ defmodule SymphonyElixir.StatusDashboard do
   end
 
   defp format_runtime_and_turns(seconds, _turn_count), do: format_runtime_seconds(seconds)
+
+  defp total_runtime_seconds(completed_runtime_seconds, running) do
+    completed_runtime_seconds = max(non_negative_integer(completed_runtime_seconds) || 0, 0)
+
+    completed_runtime_seconds +
+      Enum.reduce(running, 0, fn running_entry, total ->
+        total + max(non_negative_integer(Map.get(running_entry, :runtime_seconds)) || 0, 0)
+      end)
+  end
+
+  defp non_negative_integer(value) when is_integer(value) and value >= 0, do: value
+
+  defp non_negative_integer(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {number, ""} when number >= 0 -> number
+      _ -> nil
+    end
+  end
+
+  defp non_negative_integer(_value), do: nil
 
   defp format_count(nil), do: "0"
 
