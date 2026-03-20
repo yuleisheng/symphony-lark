@@ -313,6 +313,7 @@ defmodule SymphonyElixir.Config.Schema do
         workspace
         |> default_workspace_root(settings.workspace.root)
         |> expand_local_workspace_root()
+        |> local_turn_sandbox_writable_roots()
         |> default_turn_sandbox_policy()
     end
   end
@@ -494,10 +495,10 @@ defmodule SymphonyElixir.Config.Schema do
 
   defp normalize_secret_value(_value), do: nil
 
-  defp default_turn_sandbox_policy(workspace) do
+  defp default_turn_sandbox_policy(writable_roots) when is_list(writable_roots) do
     %{
       "type" => "workspaceWrite",
-      "writableRoots" => [workspace],
+      "writableRoots" => writable_roots,
       "readOnlyAccess" => %{"type" => "fullAccess"},
       "networkAccess" => true,
       "excludeTmpdirEnvVar" => false,
@@ -507,11 +508,11 @@ defmodule SymphonyElixir.Config.Schema do
 
   defp default_runtime_turn_sandbox_policy(workspace_root, opts) when is_binary(workspace_root) do
     if Keyword.get(opts, :remote, false) do
-      {:ok, default_turn_sandbox_policy(workspace_root)}
+      {:ok, default_turn_sandbox_policy([workspace_root])}
     else
       with expanded_workspace_root <- expand_local_workspace_root(workspace_root),
            {:ok, canonical_workspace_root} <- PathSafety.canonicalize(expanded_workspace_root) do
-        {:ok, default_turn_sandbox_policy(canonical_workspace_root)}
+        {:ok, default_turn_sandbox_policy(local_turn_sandbox_writable_roots(canonical_workspace_root))}
       end
     end
   end
@@ -534,6 +535,73 @@ defmodule SymphonyElixir.Config.Schema do
 
   defp expand_local_workspace_root(_workspace_root) do
     Path.expand(Path.join(System.tmp_dir!(), "symphony_workspaces"))
+  end
+
+  defp local_turn_sandbox_writable_roots(workspace_root) when is_binary(workspace_root) do
+    [workspace_root | git_metadata_writable_roots(workspace_root)]
+    |> Enum.uniq()
+  end
+
+  defp git_metadata_writable_roots(workspace_root) when is_binary(workspace_root) do
+    git_pointer_path = Path.join(workspace_root, ".git")
+
+    cond do
+      not File.regular?(git_pointer_path) ->
+        []
+
+      true ->
+        with {:ok, git_dir} <- resolve_git_dir(git_pointer_path, workspace_root) do
+          [git_dir | git_common_dir_roots(git_dir)]
+          |> Enum.uniq()
+        else
+          _ -> []
+        end
+    end
+  end
+
+  defp resolve_git_dir(git_pointer_path, workspace_root)
+       when is_binary(git_pointer_path) and is_binary(workspace_root) do
+    with {:ok, contents} <- File.read(git_pointer_path),
+         {:ok, raw_git_dir} <- parse_git_dir(contents),
+         {:ok, canonical_git_dir} <- PathSafety.canonicalize(Path.expand(raw_git_dir, workspace_root)) do
+      {:ok, canonical_git_dir}
+    end
+  end
+
+  defp parse_git_dir(contents) when is_binary(contents) do
+    case String.split(contents, ":", parts: 2) do
+      [prefix, raw_git_dir] ->
+        if String.downcase(String.trim(prefix)) == "gitdir" do
+          git_dir = String.trim(raw_git_dir)
+          if git_dir == "", do: {:error, :empty_git_dir}, else: {:ok, git_dir}
+        else
+          {:error, :invalid_git_dir_pointer}
+        end
+
+      _ ->
+        {:error, :invalid_git_dir_pointer}
+    end
+  end
+
+  defp git_common_dir_roots(git_dir) when is_binary(git_dir) do
+    common_dir_path = Path.join(git_dir, "commondir")
+
+    case File.read(common_dir_path) do
+      {:ok, raw_common_dir} ->
+        common_dir = String.trim(raw_common_dir)
+
+        if common_dir == "" do
+          []
+        else
+          case PathSafety.canonicalize(Path.expand(common_dir, git_dir)) do
+            {:ok, canonical_common_dir} -> [canonical_common_dir]
+            {:error, _reason} -> []
+          end
+        end
+
+      {:error, _reason} ->
+        []
+    end
   end
 
   defp format_errors(changeset) do

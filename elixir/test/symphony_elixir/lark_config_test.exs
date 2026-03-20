@@ -79,6 +79,43 @@ defmodule SymphonyElixir.LarkConfigTest do
     assert {:error, {:codex_command_not_found, "codex", "codex app-server"}} = Config.validate!()
   end
 
+  test "config includes linked worktree git metadata in the default turn sandbox policy" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-linked-worktree-sandbox-policy-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-1002")
+      git_common_dir = Path.join(test_root, "repo/.git")
+      git_dir = Path.join(git_common_dir, "worktrees/MT-1002")
+
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(git_dir)
+      File.write!(Path.join(workspace, ".git"), "gitdir: #{git_dir}\n")
+      File.write!(Path.join(git_dir, "commondir"), "../..\n")
+
+      write_workflow_file!(Workflow.workflow_file_path(), workspace_root: workspace_root)
+
+      {:ok, canonical_workspace} = SymphonyElixir.PathSafety.canonicalize(workspace)
+      {:ok, canonical_git_dir} = SymphonyElixir.PathSafety.canonicalize(git_dir)
+      {:ok, canonical_git_common_dir} = SymphonyElixir.PathSafety.canonicalize(git_common_dir)
+
+      assert Config.codex_turn_sandbox_policy(workspace) == %{
+               "type" => "workspaceWrite",
+               "writableRoots" => [canonical_workspace, canonical_git_dir, canonical_git_common_dir],
+               "readOnlyAccess" => %{"type" => "fullAccess"},
+               "networkAccess" => true,
+               "excludeTmpdirEnvVar" => false,
+               "excludeSlashTmp" => false
+             }
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "config does not require a local codex binary when only remote worker hosts are configured" do
     previous_path = System.get_env("PATH")
 

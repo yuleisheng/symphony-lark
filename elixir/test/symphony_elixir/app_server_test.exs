@@ -225,6 +225,121 @@ defmodule SymphonyElixir.AppServerTest do
     end
   end
 
+  test "app server includes linked worktree git metadata in the default turn sandbox policy" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-app-server-linked-worktree-sandbox-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      workspace = Path.join(workspace_root, "MT-1002")
+      git_common_dir = Path.join(test_root, "repo/.git")
+      git_dir = Path.join(git_common_dir, "worktrees/MT-1002")
+      codex_binary = Path.join(test_root, "fake-codex")
+      trace_file = Path.join(test_root, "codex-linked-worktree.trace")
+      previous_trace = System.get_env("SYMP_TEST_CODEx_TRACE")
+
+      on_exit(fn ->
+        if is_binary(previous_trace) do
+          System.put_env("SYMP_TEST_CODEx_TRACE", previous_trace)
+        else
+          System.delete_env("SYMP_TEST_CODEx_TRACE")
+        end
+      end)
+
+      System.put_env("SYMP_TEST_CODEx_TRACE", trace_file)
+      File.mkdir_p!(workspace)
+      File.mkdir_p!(git_dir)
+      File.write!(Path.join(workspace, ".git"), "gitdir: #{git_dir}\n")
+      File.write!(Path.join(git_dir, "commondir"), "../..\n")
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      trace_file="${SYMP_TEST_CODEx_TRACE:-/tmp/codex-linked-worktree.trace}"
+      count=0
+
+      while IFS= read -r line; do
+        count=$((count + 1))
+        printf 'JSON:%s\\n' "$line" >> "$trace_file"
+
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-1002"}}}'
+            ;;
+          3)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-1002"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server"
+      )
+
+      {:ok, canonical_workspace} = SymphonyElixir.PathSafety.canonicalize(workspace)
+      {:ok, canonical_git_dir} = SymphonyElixir.PathSafety.canonicalize(git_dir)
+      {:ok, canonical_git_common_dir} = SymphonyElixir.PathSafety.canonicalize(git_common_dir)
+
+      issue = %Issue{
+        id: "issue-linked-worktree-sandbox",
+        identifier: "MT-1002",
+        title: "Validate linked worktree sandbox policy",
+        description: "Ensure app-server grants access to linked worktree git metadata",
+        state: "In Progress",
+        url: "https://example.org/issues/MT-1002",
+        labels: ["backend"]
+      }
+
+      assert {:ok, _result} =
+               AppServer.run(workspace, "Validate linked worktree sandbox policy", issue)
+
+      expected_turn_policy = %{
+        "type" => "workspaceWrite",
+        "writableRoots" => [canonical_workspace, canonical_git_dir, canonical_git_common_dir],
+        "readOnlyAccess" => %{"type" => "fullAccess"},
+        "networkAccess" => true,
+        "excludeTmpdirEnvVar" => false,
+        "excludeSlashTmp" => false
+      }
+
+      trace = File.read!(trace_file)
+      lines = String.split(trace, "\n", trim: true)
+
+      assert Enum.any?(lines, fn line ->
+               if String.starts_with?(line, "JSON:") do
+                 line
+                 |> String.trim_leading("JSON:")
+                 |> Jason.decode!()
+                 |> then(fn payload ->
+                   payload["method"] == "turn/start" &&
+                     get_in(payload, ["params", "cwd"]) == canonical_workspace &&
+                     get_in(payload, ["params", "sandboxPolicy"]) == expected_turn_policy
+                 end)
+               else
+                 false
+               end
+             end)
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
   test "app server marks request-for-input events as a hard failure" do
     test_root =
       Path.join(
