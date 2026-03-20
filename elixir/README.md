@@ -141,6 +141,33 @@ Required env:
 export SYMPHONY_REPO_ROOT="/absolute/path/to/your/repo"
 ```
 
+### Local Reusable Worktree Pool
+
+For a local-only setup, you can point Symphony at a fixed pool of permanent worktrees instead of creating one workspace per issue. This mode is not supported with `worker.ssh_hosts`.
+
+Example:
+
+```yaml
+workspace:
+  root: "/absolute/path/to/your/permanent-worktrees"
+  reuse_paths: ["pool-1", "pool-2", "pool-3", "pool-4", "pool-5"]
+
+hooks:
+  after_create: null
+```
+
+Notes:
+
+- `workspace.root` should be the parent directory that contains the permanent worktrees.
+- Each `workspace.reuse_paths` entry can be a child directory name under `workspace.root` or an absolute path.
+- Symphony keeps the same claimed worktree for an issue across retries and releases the claim when the issue reaches a terminal state.
+- Releasing a claim does not delete the permanent worktree directory.
+- If you want each task to create or switch to its own branch inside a reusable worktree, add a `hooks.before_run` command that uses the provided `SYMPHONY_TASK_BRANCH` env var.
+- For the cleanest local operation, run Symphony from a dedicated `symphony-lark` checkout or restart it after branch changes. Switching or rebasing the same checkout while the service is live can temporarily hide the workflow file from the reload loop.
+
+Advanced local runs:
+
+- If you keep a separate local workflow file for the reusable pool, start Symphony by passing that workflow path explicitly to `./bin/symphony`.
 ## Build
 
 ```bash

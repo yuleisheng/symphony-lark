@@ -1,6 +1,6 @@
 ---
 name: install-symphony-lark
-description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain and GitHub auth, bootstrap Lark auth and tasklist access, configure the target repo path for task workspaces, and start the local service with WORKFLOW.lark.md.
+description: Use when a user wants Codex to clone or update Symphony Lark in an explicit target path, verify the local toolchain and GitHub auth, bootstrap Lark auth and tasklist access, configure the target repo path for task workspaces, and start the local service with WORKFLOW.lark.md or an explicit advanced local reusable-worktree setup.
 ---
 
 # Install Symphony Lark
@@ -19,6 +19,7 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - Prefer app-driven Lark bootstrap when tasklist access is missing.
 - Ensure the default workflow can materialize the real repo into each task workspace with a pushable upstream remote.
 - Start Symphony with `elixir/WORKFLOW.lark.md`.
+- Support an optional advanced local reusable-worktree pool only when the user explicitly asks for permanent worktrees.
 
 ## Required Inputs
 
@@ -27,6 +28,8 @@ description: Use when a user wants Codex to clone or update Symphony Lark in an 
 - the local repo path Symphony should work on via `SYMPHONY_REPO_ROOT`
 - whether the user already has `LARK_APP_ID`, `LARK_APP_SECRET`, and `LARK_TASKLIST_GUID`, or wants the skill to create the tasklist
 - the human user's actual Feishu/Lark account email, only when tasklist bootstrap is needed
+- whether the user wants the default per-task workspace flow or an advanced local reusable-worktree pool
+- if the user wants the advanced local pool, the parent directory and reusable worktree paths to configure
 
 ## Steps
 
@@ -83,7 +86,16 @@ mise exec -- mix build
      - write back the final `LARK_TASKLIST_GUID`
    - if the tasklist already has a `Status` field, verify it includes every required option; patch or recreate it before continuing
    - if an existing user-owned tasklist is unreadable by the app, stop treating it as the primary path and create an app-owned tasklist instead
-6. Start Symphony.
+6. Choose the runtime mode.
+   - Default mode: use `elixir/WORKFLOW.lark.md` and per-task workspaces.
+   - Advanced local reusable-worktree mode: use this only if the user explicitly asks for permanent worktrees.
+   - For the advanced local mode:
+     - verify the reusable worktrees already exist
+     - verify each reusable worktree is clean before starting Symphony
+     - configure a local workflow file with the reusable worktree pool and any local hook behavior
+     - if the user wants one branch per task inside each reusable worktree, use a `before_run` hook that reads `SYMPHONY_TASK_BRANCH`
+     - keep the pool config generic or local-only; never hardcode user-specific paths into shared defaults
+7. Start Symphony.
 
 ```bash
 cd <target>/elixir
@@ -94,9 +106,20 @@ mise exec -- ./bin/symphony \
   ./WORKFLOW.lark.md
 ```
 
-Add `--port 4000` if the user wants the dashboard. Start Symphony from the same shell where `command -v codex` succeeds.
+Advanced local reusable-worktree mode:
 
-7. Smoke test.
+```bash
+cd <target>/elixir
+export SYMPHONY_REPO_ROOT="<repo-path>"
+command -v codex
+mise exec -- ./bin/symphony \
+  --i-understand-that-this-will-be-running-without-the-usual-guardrails \
+  ./WORKFLOW.local.lark.md
+```
+
+Use the default mode unless the user explicitly asks for the advanced local pool. Start Symphony from the same shell where `command -v codex` succeeds.
+
+8. Smoke test.
    - confirm the service boots
    - confirm the configured workflow loads
    - confirm Symphony can read the configured tasklist
@@ -104,6 +127,7 @@ Add `--port 4000` if the user wants the dashboard. Start Symphony from the same 
    - confirm the `Status` field options exactly match `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, `Done`
    - confirm `gh` can reach GitHub so code-change tasks can publish PRs
    - confirm `git -C "$SYMPHONY_REPO_ROOT" remote get-url origin` is a pushable GitHub remote so new task workspaces inherit the right `origin`
+   - for the advanced local pool, confirm tasks are routed into distinct reusable worktrees and each worktree starts clean
 
 ## API Paths
 
@@ -119,4 +143,6 @@ Add `--port 4000` if the user wants the dashboard. Start Symphony from the same 
 - The default workflow expects `SYMPHONY_REPO_ROOT` so each task workspace contains a real repo checkout instead of an empty temp directory, and it inherits the source repo's `origin` remote for PR publication when one exists.
 - The supported workflow states are `Todo`, `In Progress`, `Blocked`, `Input/Feedback Given`, `In Review`, and `Done`.
 - The lowest-friction path is to let the skill create the tasklist and `Status` field instead of asking the user to find an existing tasklist GUID by hand.
+- Keep the advanced local reusable-worktree mode opt-in. Do not choose it unless the user explicitly wants permanent worktrees.
+- If Symphony is running from a branch-specific workflow file, avoid switching or rebasing that same `symphony-lark` checkout while the service is live; use a dedicated checkout or restart after branch changes.
 - If blocked, report the exact missing tool, env var, permission, or tasklist/status setup item.

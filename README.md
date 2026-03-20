@@ -44,6 +44,7 @@ The full manual path lives in [`elixir/README.md`](elixir/README.md). It covers:
 - how to set `SYMPHONY_REPO_ROOT` and verify GitHub auth
 - the default 5 second polling interval
 - how to run Symphony with `WORKFLOW.lark.md`
+- an optional advanced local reusable-worktree pool for fixed permanent worktrees
 
 ## Agent Status Flow
 
