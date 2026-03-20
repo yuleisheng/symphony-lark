@@ -3,7 +3,7 @@ defmodule SymphonyElixirWeb.Presenter do
   Shared projections for the observability API and dashboard.
   """
 
-  alias SymphonyElixir.{Config, Orchestrator, StatusDashboard}
+  alias SymphonyElixir.{Orchestrator, StatusDashboard, Workspace}
 
   @spec state_payload(GenServer.name(), timeout()) :: map()
   def state_payload(orchestrator, snapshot_timeout_ms) do
@@ -160,8 +160,17 @@ defmodule SymphonyElixirWeb.Presenter do
   defp workspace_path(issue_identifier, running, retry) do
     (running && Map.get(running, :workspace_path)) ||
       (retry && Map.get(retry, :workspace_path)) ||
-      Path.join(Config.settings!().workspace.root, issue_identifier)
+      assigned_workspace_path(issue_identifier)
   end
+
+  defp assigned_workspace_path(issue_identifier) when is_binary(issue_identifier) do
+    case Workspace.assign_for_issue(issue_identifier) do
+      {:ok, workspace} -> workspace
+      _ -> nil
+    end
+  end
+
+  defp assigned_workspace_path(_issue_identifier), do: nil
 
   defp workspace_host(running, retry) do
     (running && Map.get(running, :worker_host)) || (retry && Map.get(retry, :worker_host))

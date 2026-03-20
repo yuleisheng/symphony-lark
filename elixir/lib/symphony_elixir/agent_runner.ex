@@ -46,7 +46,16 @@ defmodule SymphonyElixir.AgentRunner do
   defp run_on_worker_host(issue, codex_update_recipient, opts, worker_host) do
     Logger.info("Starting worker attempt for #{issue_context(issue)} worker_host=#{worker_host_for_log(worker_host)}")
 
-    case Workspace.create_for_issue(issue, worker_host) do
+    workspace_result =
+      case Keyword.get(opts, :workspace) do
+        workspace when is_binary(workspace) ->
+          Workspace.prepare_assigned_workspace(workspace, issue, worker_host)
+
+        _ ->
+          Workspace.create_for_issue(issue, worker_host)
+      end
+
+    case workspace_result do
       {:ok, workspace} ->
         send_worker_runtime_info(codex_update_recipient, issue, worker_host, workspace)
 

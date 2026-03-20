@@ -1,6 +1,8 @@
 defmodule SymphonyElixir.AgentRunnerTest do
   use SymphonyElixir.TestSupport
 
+  alias SymphonyElixir.PathSafety
+
   test "agent runner injects the latest feedback comment into the first prompt" do
     test_root =
       Path.join(
@@ -366,6 +368,88 @@ defmodule SymphonyElixir.AgentRunnerTest do
       assert prompt_payload =~ "Task GUID"
       assert prompt_payload =~ "Continuation guidance:"
       assert prompt_payload =~ "fresh Codex thread"
+    after
+      File.rm_rf(test_root)
+    end
+  end
+
+  test "agent runner accepts a preassigned workspace" do
+    test_root =
+      Path.join(
+        System.tmp_dir!(),
+        "symphony-elixir-agent-runner-preassigned-#{System.unique_integer([:positive])}"
+      )
+
+    try do
+      workspace_root = Path.join(test_root, "workspaces")
+      preassigned_workspace = Path.join(workspace_root, "shared-slot")
+      codex_binary = Path.join(test_root, "fake-codex")
+      workspace_log = Path.join(test_root, "workspace.log")
+
+      File.mkdir_p!(workspace_root)
+      File.write!(workspace_log, "")
+
+      File.write!(codex_binary, """
+      #!/bin/sh
+      workspace_log="#{workspace_log}"
+      count=0
+      while IFS= read -r _line; do
+        count=$((count + 1))
+        case "$count" in
+          1)
+            printf '%s\\n' '{"id":1,"result":{}}'
+            ;;
+          2)
+            ;;
+          3)
+            pwd -P > "$workspace_log"
+            printf '%s\\n' '{"id":2,"result":{"thread":{"id":"thread-preassigned"}}}'
+            ;;
+          4)
+            printf '%s\\n' '{"id":3,"result":{"turn":{"id":"turn-preassigned"}}}'
+            printf '%s\\n' '{"method":"turn/completed"}'
+            exit 0
+            ;;
+          *)
+            exit 0
+            ;;
+        esac
+      done
+      """)
+
+      File.chmod!(codex_binary, 0o755)
+
+      write_workflow_file!(Workflow.workflow_file_path(),
+        workspace_root: workspace_root,
+        codex_command: "#{codex_binary} app-server",
+        max_turns: 1
+      )
+
+      issue = %Issue{
+        id: "issue-preassigned-workspace",
+        identifier: "LT/PREASSIGNED",
+        title: "Use the preassigned workspace",
+        description: "The orchestrator should be able to choose the workspace ahead of time.",
+        state: "In Progress"
+      }
+
+      expected_workspace =
+        preassigned_workspace
+        |> PathSafety.canonicalize()
+        |> elem(1)
+
+      default_workspace = Path.join(workspace_root, "LT_PREASSIGNED")
+
+      assert :ok =
+               AgentRunner.run(issue, nil,
+                 workspace: preassigned_workspace,
+                 issue_state_fetcher: fn _issue_ids -> {:ok, []} end,
+                 max_turns: 1
+               )
+
+      assert File.dir?(expected_workspace)
+      assert String.trim(File.read!(workspace_log)) == expected_workspace
+      refute File.exists?(default_workspace)
     after
       File.rm_rf(test_root)
     end

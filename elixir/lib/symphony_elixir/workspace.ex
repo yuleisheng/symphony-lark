@@ -10,24 +10,53 @@ defmodule SymphonyElixir.Workspace do
 
   @type worker_host :: String.t() | nil
 
-  @spec create_for_issue(map() | String.t() | nil, worker_host()) ::
+  @spec assign_for_issue(map() | String.t() | nil, worker_host()) ::
           {:ok, Path.t()} | {:error, term()}
-  def create_for_issue(issue_or_identifier, worker_host \\ nil) do
+  def assign_for_issue(issue_or_identifier, worker_host \\ nil) do
     issue_context = issue_context(issue_or_identifier)
 
     try do
       safe_id = safe_identifier(issue_context.issue_identifier)
 
       with {:ok, workspace} <- workspace_path_for_issue(safe_id, worker_host),
-           :ok <- validate_workspace_path(workspace, worker_host),
+           :ok <- validate_workspace_path(workspace, worker_host) do
+        {:ok, workspace}
+      end
+    rescue
+      error in [ArgumentError, ErlangError, File.Error] ->
+        Logger.error("Workspace assignment failed #{issue_log_context(issue_context)} worker_host=#{worker_host_for_log(worker_host)} error=#{Exception.message(error)}")
+
+        {:error, error}
+    end
+  end
+
+  @spec prepare_assigned_workspace(Path.t(), map() | String.t() | nil, worker_host()) ::
+          {:ok, Path.t()} | {:error, term()}
+  def prepare_assigned_workspace(workspace, issue_or_identifier, worker_host \\ nil)
+      when is_binary(workspace) do
+    issue_context = issue_context(issue_or_identifier)
+
+    try do
+      with :ok <- validate_workspace_path(workspace, worker_host),
            {:ok, workspace, created?} <- ensure_workspace(workspace, worker_host),
            :ok <- maybe_run_after_create_hook(workspace, issue_context, created?, worker_host) do
         {:ok, workspace}
       end
     rescue
       error in [ArgumentError, ErlangError, File.Error] ->
-        Logger.error("Workspace creation failed #{issue_log_context(issue_context)} worker_host=#{worker_host_for_log(worker_host)} error=#{Exception.message(error)}")
+        Logger.error("Workspace preparation failed #{issue_log_context(issue_context)} worker_host=#{worker_host_for_log(worker_host)} workspace=#{workspace} error=#{Exception.message(error)}")
+
         {:error, error}
+    end
+  end
+
+  @spec create_for_issue(map() | String.t() | nil, worker_host()) ::
+          {:ok, Path.t()} | {:error, term()}
+  def create_for_issue(issue_or_identifier, worker_host \\ nil) do
+    with {:ok, workspace} <- assign_for_issue(issue_or_identifier, worker_host),
+         {:ok, workspace} <-
+           prepare_assigned_workspace(workspace, issue_or_identifier, worker_host) do
+      {:ok, workspace}
     end
   end
 
@@ -131,7 +160,8 @@ defmodule SymphonyElixir.Workspace do
   def remove_issue_workspaces(identifier), do: remove_issue_workspaces(identifier, nil)
 
   @spec remove_issue_workspaces(term(), worker_host()) :: :ok
-  def remove_issue_workspaces(identifier, worker_host) when is_binary(identifier) and is_binary(worker_host) do
+  def remove_issue_workspaces(identifier, worker_host)
+      when is_binary(identifier) and is_binary(worker_host) do
     safe_id = safe_identifier(identifier)
 
     case workspace_path_for_issue(safe_id, worker_host) do
@@ -165,7 +195,8 @@ defmodule SymphonyElixir.Workspace do
 
   @spec run_before_run_hook(Path.t(), map() | String.t() | nil, worker_host()) ::
           :ok | {:error, term()}
-  def run_before_run_hook(workspace, issue_or_identifier, worker_host \\ nil) when is_binary(workspace) do
+  def run_before_run_hook(workspace, issue_or_identifier, worker_host \\ nil)
+      when is_binary(workspace) do
     issue_context = issue_context(issue_or_identifier)
     hooks = Config.settings!().hooks
 
@@ -179,7 +210,8 @@ defmodule SymphonyElixir.Workspace do
   end
 
   @spec run_after_run_hook(Path.t(), map() | String.t() | nil, worker_host()) :: :ok
-  def run_after_run_hook(workspace, issue_or_identifier, worker_host \\ nil) when is_binary(workspace) do
+  def run_after_run_hook(workspace, issue_or_identifier, worker_host \\ nil)
+      when is_binary(workspace) do
     issue_context = issue_context(issue_or_identifier)
     hooks = Config.settings!().hooks
 
@@ -199,7 +231,8 @@ defmodule SymphonyElixir.Workspace do
     |> PathSafety.canonicalize()
   end
 
-  defp workspace_path_for_issue(safe_id, worker_host) when is_binary(safe_id) and is_binary(worker_host) do
+  defp workspace_path_for_issue(safe_id, worker_host)
+       when is_binary(safe_id) and is_binary(worker_host) do
     {:ok, Path.join(Config.settings!().workspace.root, safe_id)}
   end
 
@@ -314,7 +347,8 @@ defmodule SymphonyElixir.Workspace do
     end
   end
 
-  defp run_hook(command, workspace, issue_context, hook_name, worker_host) when is_binary(worker_host) do
+  defp run_hook(command, workspace, issue_context, hook_name, worker_host)
+       when is_binary(worker_host) do
     timeout_ms = Config.settings!().hooks.timeout_ms
 
     Logger.info("Running workspace hook hook=#{hook_name} #{issue_log_context(issue_context)} workspace=#{workspace} worker_host=#{worker_host}")
@@ -433,7 +467,8 @@ defmodule SymphonyElixir.Workspace do
   end
 
   defp run_remote_command(worker_host, script, timeout_ms)
-       when is_binary(worker_host) and is_binary(script) and is_integer(timeout_ms) and timeout_ms > 0 do
+       when is_binary(worker_host) and is_binary(script) and is_integer(timeout_ms) and
+              timeout_ms > 0 do
     task =
       Task.async(fn ->
         SSH.run(worker_host, script, stderr_to_stdout: true)
